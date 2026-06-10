@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
+import { apiRequest } from '../utils/api';
 
 export const useHrStore = defineStore('hr', () => {
   // --- SEED EMPLOYEES ---
@@ -922,6 +923,167 @@ export const useHrStore = defineStore('hr', () => {
     return false;
   }
 
+  const backendConnected = ref(false);
+
+  async function fetchEmployees() {
+    try {
+      const data = await apiRequest('/api/v1/employees');
+      if (data && data.length > 0) {
+        employees.value = data.map(emp => ({
+          id: emp.id,
+          employeeCode: emp.employeeCode,
+          fullName: emp.name,
+          email: emp.email,
+          phone: emp.phone,
+          address: emp.address,
+          department: emp.department,
+          designation: emp.designation,
+          managerId: emp.managerId,
+          managerName: emp.managerId ? 'Sarah Jenkins' : null,
+          joiningDate: emp.joiningDate,
+          employmentType: 'Full-time',
+          role: emp.employeeCode === 'EMP001' ? 'HR_ADMIN' : emp.employeeCode === 'EMP002' ? 'MANAGER' : emp.employeeCode === 'EMP003' ? 'FINANCE_ADMIN' : emp.employeeCode === 'EMP005' ? 'SYSTEM_ADMIN' : 'EMPLOYEE',
+          salary: emp.salary,
+          salaryBand: emp.salaryBand,
+          status: emp.status,
+          onboardingPercent: emp.onboardingPercent,
+          bankDetails: {
+            accountNo: emp.bankAccountNo,
+            ifsc: emp.bankIfsc,
+            bankName: emp.bankName
+          },
+          emergencyContact: {
+            name: emp.emergencyName,
+            relation: emp.emergencyRelation,
+            phone: emp.emergencyPhone
+          },
+          documents: []
+        }));
+        backendConnected.value = true;
+      }
+    } catch (e) {
+      console.warn('API error fetching employees:', e.message);
+    }
+  }
+
+  async function fetchLeaves(employeeId) {
+    try {
+      const balances = await apiRequest(`/api/v1/leaves/balances?employeeId=${employeeId}`);
+      const emp = employees.value.find(e => e.id === employeeId);
+      if (emp && balances) {
+        leaveBalances.value[emp.employeeCode] = balances.map(b => ({
+          type: b.leaveType === 'ANNUAL' ? 'Annual' : b.leaveType === 'SICK' ? 'Sick' : b.leaveType === 'CASUAL' ? 'Casual' : b.leaveType,
+          accrued: b.leaveType === 'ANNUAL' ? 15 : b.leaveType === 'SICK' ? 10 : 7,
+          used: (b.leaveType === 'ANNUAL' ? 15 : b.leaveType === 'SICK' ? 10 : 7) - b.balance,
+          remaining: b.balance,
+          carryForward: 0
+        }));
+      }
+      
+      const requests = await apiRequest(`/api/v1/leaves/requests?employeeId=${employeeId}`);
+      if (requests) {
+        leaveRequests.value = requests.map(req => ({
+          id: req.id,
+          employeeCode: emp?.employeeCode || 'EMP',
+          fullName: emp?.fullName || 'User',
+          department: emp?.department || 'Department',
+          leaveType: req.leaveType === 'ANNUAL' ? 'Annual' : req.leaveType === 'SICK' ? 'Sick' : req.leaveType === 'CASUAL' ? 'Casual' : req.leaveType,
+          fromDate: req.startDate,
+          toDate: req.endDate,
+          daysRequested: Math.round((new Date(req.endDate) - new Date(req.startDate)) / (1000 * 60 * 60 * 24)) + 1,
+          reason: req.reason,
+          status: req.status,
+          approvedBy: req.managerComment ? 'Manager' : null,
+          comments: req.managerComment,
+          createdAt: req.createdAt
+        }));
+      }
+    } catch (e) {
+      console.warn('API error fetching leaves:', e.message);
+    }
+  }
+
+  async function fetchExpenses(employeeId) {
+    try {
+      const claims = await apiRequest(`/api/v1/expenses?employeeId=${employeeId}`);
+      const emp = employees.value.find(e => e.id === employeeId);
+      if (claims) {
+        expenseClaims.value = claims.map(c => ({
+          id: c.id,
+          employeeCode: emp?.employeeCode || 'EMP',
+          fullName: emp?.fullName || 'User',
+          department: emp?.department || 'Department',
+          category: c.category,
+          amount: c.amount,
+          currency: c.currency,
+          date: c.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
+          description: c.description,
+          receiptName: 'receipt.pdf',
+          status: c.status,
+          timeline: [
+            { status: 'SUBMITTED', title: 'Submitted', timestamp: c.createdAt }
+          ],
+          paymentRef: null
+        }));
+      }
+    } catch (e) {
+      console.warn('API error fetching expenses:', e.message);
+    }
+  }
+
+  async function fetchPayslips(employeeId) {
+    try {
+      const list = await apiRequest(`/api/v1/payroll/employee/${employeeId}`);
+      const emp = employees.value.find(e => e.id === employeeId);
+      if (list) {
+        payslips.value = list.map(p => ({
+          id: p.id,
+          employeeCode: emp?.employeeCode || 'EMP',
+          month: p.month + '-' + p.year,
+          grossPay: p.grossPay,
+          allowances: 0,
+          deductions: p.deduction,
+          netSalary: p.netPay,
+          basic: p.grossPay,
+          pf: 0,
+          tax: 0,
+          status: p.published ? 'PUBLISHED' : 'DRAFT',
+          publishedAt: p.createdAt
+        }));
+      }
+    } catch (e) {
+      console.warn('API error fetching payslips:', e.message);
+    }
+  }
+
+  async function fetchNotifications(userId) {
+    try {
+      const list = await apiRequest(`/api/v1/notifications?userId=${userId}`);
+      if (list) {
+        notifications.value = list.map(n => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          type: 'System',
+          isRead: n.isRead,
+          createdAt: n.createdAt,
+          url: ''
+        }));
+      }
+    } catch (e) {
+      console.warn('API error fetching notifications:', e.message);
+    }
+  }
+
+  async function syncAll(userId, employeeId) {
+    if (!userId || !employeeId) return;
+    await fetchEmployees();
+    await fetchLeaves(employeeId);
+    await fetchExpenses(employeeId);
+    await fetchPayslips(employeeId);
+    await fetchNotifications(userId);
+  }
+
   return {
     employees,
     leaveRequests,
@@ -939,6 +1101,7 @@ export const useHrStore = defineStore('hr', () => {
     emailTemplates,
     schedulerJobs,
     auditLogs,
+    backendConnected,
     // Methods
     addLog,
     addNotification,
@@ -959,6 +1122,12 @@ export const useHrStore = defineStore('hr', () => {
     addNewEmployee,
     updateEmployeeHrView,
     triggerSchedulerJob,
-    toggleSchedulerJob
+    toggleSchedulerJob,
+    fetchEmployees,
+    fetchLeaves,
+    fetchExpenses,
+    fetchPayslips,
+    fetchNotifications,
+    syncAll
   };
 });

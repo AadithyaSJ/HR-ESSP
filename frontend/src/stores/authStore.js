@@ -1,25 +1,26 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
+import { apiRequest } from '../utils/api';
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref({
-    id: 'emp-101',
-    employeeCode: 'EMP2026101',
-    fullName: 'Jane Doe',
-    email: 'jane.doe@company.com',
-    role: 'EMPLOYEE', // DEFAULT ROLE
-    department: 'Engineering',
-    designation: 'Senior Frontend Developer'
+    id: null,
+    employeeCode: null,
+    fullName: 'Guest User',
+    email: '',
+    role: 'EMPLOYEE',
+    department: '',
+    designation: ''
   });
 
-  const isAuthenticated = ref(true); // Pre-authenticated for easy testing
-  const activeRole = ref('EMPLOYEE'); // Active role in switcher: EMPLOYEE, MANAGER, HR_ADMIN, FINANCE_ADMIN, SYSTEM_ADMIN
+  const isAuthenticated = ref(false); // Change default to false for real security
+  const activeRole = ref('EMPLOYEE');
   
   // Session timers
   const idleTimeSeconds = ref(0);
   const timeLimitSeconds = ref(1200); // 20 minutes
   const warningLimitSeconds = ref(1080); // 18 minutes
-  const timerSpeed = ref(1); // multiplier: 1x, or 60x for demo (1s real time = 1 min simulation)
+  const timerSpeed = ref(1);
   
   let timerInterval = null;
 
@@ -32,7 +33,6 @@ export const useAuthStore = defineStore('auth', () => {
     timerInterval = setInterval(() => {
       if (!isAuthenticated.value) return;
       
-      // Advance timer by speed factor
       idleTimeSeconds.value += timerSpeed.value;
       
       if (idleTimeSeconds.value >= timeLimitSeconds.value) {
@@ -56,19 +56,107 @@ export const useAuthStore = defineStore('auth', () => {
     resetIdleTimer();
   }
 
-  function login(_email, _password) {
-    isAuthenticated.value = true;
-    resetIdleTimer();
-    return true;
+  async function login(email, password) {
+    try {
+      const data = await apiRequest('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+      });
+      
+      localStorage.setItem('jwt_token', data.token);
+      
+      // Fetch employee profile details to populate user model
+      let profile = null;
+      try {
+        profile = await apiRequest(`/api/v1/employees/code/${data.employeeCode}`);
+      } catch (e) {
+        // Fallback profile if employee not created yet
+      }
+
+      user.value = {
+        id: profile?.id || 'emp-id',
+        employeeCode: data.employeeCode,
+        fullName: data.fullName,
+        email: data.email,
+        role: data.role,
+        department: profile?.department || '',
+        designation: profile?.designation || ''
+      };
+
+      activeRole.value = data.role;
+      isAuthenticated.value = true;
+      resetIdleTimer();
+      
+      try {
+        const { useHrStore } = await import('./hrStore');
+        const hrStore = useHrStore();
+        await hrStore.syncAll(profile?.id, profile?.id);
+      } catch (e) {
+        console.warn('Sync failed on login:', e);
+      }
+
+      return true;
+    } catch (e) {
+      isAuthenticated.value = false;
+      throw e;
+    }
   }
 
-  function loginSSO(_provider) {
-    isAuthenticated.value = true;
-    resetIdleTimer();
-    return true;
+  async function loginSSO(provider) {
+    try {
+      const data = await apiRequest(`/api/auth/sso-login?provider=${provider}`, {
+        method: 'POST'
+      });
+      
+      localStorage.setItem('jwt_token', data.token);
+      
+      let profile = null;
+      try {
+        profile = await apiRequest(`/api/v1/employees/code/${data.employeeCode}`);
+      } catch (e) {
+        // fallback
+      }
+
+      user.value = {
+        id: profile?.id || 'emp-id',
+        employeeCode: data.employeeCode,
+        fullName: data.fullName,
+        email: data.email,
+        role: data.role,
+        department: profile?.department || '',
+        designation: profile?.designation || ''
+      };
+
+      activeRole.value = data.role;
+      isAuthenticated.value = true;
+      resetIdleTimer();
+
+      try {
+        const { useHrStore } = await import('./hrStore');
+        const hrStore = useHrStore();
+        await hrStore.syncAll(profile?.id, profile?.id);
+      } catch (e) {
+        console.warn('Sync failed on SSO login:', e);
+      }
+
+      return true;
+    } catch (e) {
+      isAuthenticated.value = false;
+      throw e;
+    }
   }
 
   function logout() {
+    localStorage.removeItem('jwt_token');
+    user.value = {
+      id: null,
+      employeeCode: null,
+      fullName: 'Guest User',
+      email: '',
+      role: 'EMPLOYEE',
+      department: '',
+      designation: ''
+    };
     isAuthenticated.value = false;
     stopIdleTimer();
   }
