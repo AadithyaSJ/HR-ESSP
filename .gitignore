@@ -1,0 +1,12 @@
+# Terraform temporary and binary files
+terraform/.terraform/
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/.terraform.lock.hcl
+
+# Environment variables
+.env
+
+# System files
+.DS_Store
+Thumbs.db

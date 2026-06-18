@@ -1,0 +1,58 @@
+version: '3.9'
+
+services:
+  # Production Database Container
+  db:
+    image: postgres:16-alpine
+    container_name: hrportal-prod-db
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-springuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-spring123}
+      POSTGRES_DB: ${DB_NAME:-dot_solution}
+      POSTGRES_INITDB_ARGS: "-c timezone=Asia/Kolkata"
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_prod_data:/var/lib/postgresql/data
+    networks:
+      - hrportal-prod-net
+
+  # Production Spring Boot Backend
+  backend:
+    image: ${BACKEND_IMAGE:-hrportal-backend:latest}
+    container_name: hrportal-prod-backend
+    restart: always
+    depends_on:
+      - db
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${DB_NAME:-dot_solution}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-springuser}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD:-spring123}
+      AWS_S3_BUCKET: hr-man
+      AWS_REGION: eu-north-1
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+    ports:
+      - "8080:8080"
+    networks:
+      - hrportal-prod-net
+
+  # Production Nginx Frontend serving the Vue built app
+  frontend:
+    image: ${FRONTEND_IMAGE:-hrportal-frontend:latest}
+    container_name: hrportal-prod-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - hrportal-prod-net
+
+volumes:
+  pg_prod_data:
+
+networks:
+  hrportal-prod-net:
+    driver: bridge

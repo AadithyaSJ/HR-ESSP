@@ -1,6 +1,7 @@
 package com.dotsolution.dot.expense;
 
 import com.dotsolution.dot.common.ApiResponse;
+import com.dotsolution.dot.common.storage.StorageService;
 import com.dotsolution.dot.expense.entity.ExpenseClaim;
 import com.dotsolution.dot.expense.entity.ExpenseReceipt;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -8,17 +9,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
-import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/v1/expenses")
@@ -26,6 +21,9 @@ public class ExpenseController {
 
     @Autowired
     private ExpenseService expenseService;
+
+    @Autowired
+    private StorageService storageService;
 
     @GetMapping("/limits")
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
@@ -145,18 +143,13 @@ public class ExpenseController {
         }
         
         try {
-            Path storageLoc = Paths.get("uploads", "receipts").toAbsolutePath().normalize();
-            Files.createDirectories(storageLoc);
-            
-            String cleanFileName = System.currentTimeMillis() + "_" + originalFileName;
-            Path targetLocation = storageLoc.resolve(cleanFileName);
-            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+            String storagePath = storageService.storeFile("receipts", originalFileName, file);
             
             return ResponseEntity.ok(ApiResponse.success(Map.of(
-                "fileName", cleanFileName,
-                "filePath", targetLocation.toString()
+                "fileName", originalFileName,
+                "filePath", storagePath
             ), "Receipt uploaded successfully"));
-        } catch (IOException ex) {
+        } catch (Exception ex) {
             throw new RuntimeException("Could not store file " + originalFileName, ex);
         }
     }

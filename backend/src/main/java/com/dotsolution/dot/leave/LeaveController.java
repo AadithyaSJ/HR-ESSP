@@ -1,18 +1,18 @@
 package com.dotsolution.dot.leave;
 
 import com.dotsolution.dot.common.ApiResponse;
+import com.dotsolution.dot.common.storage.StorageService;
 import com.dotsolution.dot.leave.entity.LeaveBalance;
 import com.dotsolution.dot.leave.entity.LeaveRequest;
 import com.dotsolution.dot.leave.entity.PublicHoliday;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.nio.file.*;
 import java.util.*;
 
 @RestController
@@ -24,6 +24,9 @@ public class LeaveController {
 
     @Autowired
     private com.dotsolution.dot.leave.repository.PublicHolidayRepository publicHolidayRepository;
+
+    @Autowired
+    private StorageService storageService;
 
     @GetMapping("/balances")
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
@@ -110,18 +113,13 @@ public class LeaveController {
         }
         
         try {
-            Path storageLoc = Paths.get("uploads", "attachments").toAbsolutePath().normalize();
-            Files.createDirectories(storageLoc);
-            
-            String cleanFileName = System.currentTimeMillis() + "_" + originalFileName;
-            Path targetLocation = storageLoc.resolve(cleanFileName);
-            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+            String storagePath = storageService.storeFile("attachments", originalFileName, file);
             
             return ResponseEntity.ok(ApiResponse.success(Map.of(
                 "fileName", originalFileName,
-                "filePath", targetLocation.toString()
+                "filePath", storagePath
             ), "File uploaded successfully"));
-        } catch (IOException ex) {
+        } catch (Exception ex) {
             throw new RuntimeException("Could not store file " + originalFileName, ex);
         }
     }
@@ -130,25 +128,35 @@ public class LeaveController {
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
     public ResponseEntity<org.springframework.core.io.Resource> downloadAttachment(@RequestParam("path") String path) {
         try {
-            Path filePath = Paths.get(path).normalize();
-            if (!filePath.startsWith(Paths.get("uploads").toAbsolutePath().normalize())) {
-                throw new SecurityException("Unauthorized file path access");
+            byte[] data = storageService.loadFile(path);
+            
+            // Extract original filename (removing timestamp prefix)
+            String filename = path;
+            int slashIdx = path.lastIndexOf('/');
+            if (slashIdx != -1) {
+                filename = path.substring(slashIdx + 1);
+            }
+            int backslashIdx = path.lastIndexOf('\\');
+            if (backslashIdx != -1) {
+                filename = path.substring(backslashIdx + 1);
+            }
+            if (filename.contains("_")) {
+                filename = filename.substring(filename.indexOf("_") + 1);
             }
             
-            org.springframework.core.io.Resource resource = new org.springframework.core.io.UrlResource(filePath.toUri());
-            if (resource.exists()) {
-                String cleanName = resource.getFilename();
-                if (cleanName != null && cleanName.contains("_")) {
-                    cleanName = cleanName.substring(cleanName.indexOf("_") + 1);
+            final String downloadName = filename;
+            org.springframework.core.io.Resource resource = new ByteArrayResource(data) {
+                @Override
+                public String getFilename() {
+                    return downloadName;
                 }
-                return ResponseEntity.ok()
-                        .contentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM)
-                        .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + cleanName + "\"")
-                        .body(resource);
-            } else {
-                throw new com.dotsolution.dot.common.EntityNotFoundException("File not found");
-            }
-        } catch (java.net.MalformedURLException ex) {
+            };
+            
+            return ResponseEntity.ok()
+                    .contentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM)
+                    .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + downloadName + "\"")
+                    .body(resource);
+        } catch (Exception ex) {
             throw new com.dotsolution.dot.common.EntityNotFoundException("File not found: " + ex.getMessage());
         }
     }
