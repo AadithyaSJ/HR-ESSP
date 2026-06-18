@@ -4,18 +4,21 @@ import { apiRequest } from '../utils/api';
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref({
-    id: null,
-    employeeCode: null,
-    fullName: 'Guest User',
-    email: '',
-    role: 'EMPLOYEE',
-    department: '',
-    designation: '',
+    id: 'emp-lisa',
+    employeeCode: 'EMP2026001',
+    fullName: 'Lisa Anderson',
+    email: 'lisa.anderson@company.com',
+    role: 'HR_ADMIN',
+    department: 'Human Resources',
+    designation: 'HR Administrator',
+    phone: '+1 (555) 019-2834',
+    photo: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
+    lastLogin: 'Today, 10:45 AM',
     onboardingStatus: 'APPROVED'
   });
 
-  const isAuthenticated = ref(false); // Change default to false for real security
-  const activeRole = ref('EMPLOYEE');
+  const isAuthenticated = ref(true); // Default to true for presentation
+  const activeRole = ref('HR_ADMIN');
   
   // Session timers
   const idleTimeSeconds = ref(0);

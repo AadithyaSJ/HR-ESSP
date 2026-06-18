@@ -84,9 +84,21 @@ async function triggerDownload(filePath, fileName) {
   }
 }
 
-onMounted(() => {
+const isLoading = ref(false);
+
+onMounted(async () => {
   activeTab.value = route.meta.tab || 'my-leaves';
-  hrStore.fetchPublicHolidays();
+  isLoading.value = true;
+  try {
+    await hrStore.fetchEmployees();
+    await hrStore.fetchPublicHolidays();
+    if (authStore.user) {
+      await hrStore.fetchLeaves(authStore.user.id);
+    }
+    await new Promise(r => setTimeout(r, 500));
+  } finally {
+    isLoading.value = false;
+  }
 });
 
 function changeTab(tab) {
@@ -186,10 +198,21 @@ async function handleApplyLeave() {
 }
 
 // User requests list
+const requestTypeFilter = ref('All');
+const requestSearchQuery = ref('');
+
 const filteredMyRequests = computed(() => {
-  const reqs = hrStore.leaveRequests.filter(r => r.employeeCode === authStore.user.employeeCode);
-  if (requestFilter.value === 'All') return reqs;
-  return reqs.filter(r => r.status === requestFilter.value);
+  let reqs = hrStore.leaveRequests.filter(r => r.employeeCode === authStore.user.employeeCode);
+  if (requestFilter.value !== 'All') {
+    reqs = reqs.filter(r => r.status === requestFilter.value);
+  }
+  if (requestTypeFilter.value !== 'All') {
+    reqs = reqs.filter(r => r.leaveType.toLowerCase() === requestTypeFilter.value.toLowerCase());
+  }
+  if (requestSearchQuery.value) {
+    reqs = reqs.filter(r => r.reason && r.reason.toLowerCase().includes(requestSearchQuery.value.toLowerCase()));
+  }
+  return reqs;
 });
 
 function handleCancelRequest(id) {
@@ -470,6 +493,24 @@ async function handleAddHoliday() {
               </div>
             </div>
 
+            <!-- FILTERS PANEL -->
+            <div class="grid-12 mb-4">
+              <div class="col-6 form-group m-0">
+                <label class="form-label text-xs">Search Reason</label>
+                <input type="text" v-model="requestSearchQuery" class="form-control text-xs" placeholder="Search by reason..." />
+              </div>
+              <div class="col-6 form-group m-0">
+                <label class="form-label text-xs">Leave Type</label>
+                <select v-model="requestTypeFilter" class="form-control text-xs">
+                  <option value="All">All Types</option>
+                  <option value="Annual">Annual</option>
+                  <option value="Sick">Sick</option>
+                  <option value="Casual">Casual</option>
+                  <option value="Unpaid">Unpaid</option>
+                </select>
+              </div>
+            </div>
+
             <div class="table-container">
               <table class="table">
                 <thead>
@@ -483,50 +524,64 @@ async function handleAddHoliday() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="req in filteredMyRequests" :key="req.id">
-                    <td class="font-semibold">{{ req.leaveType }}</td>
-                    <td>
-                      <div class="text-sm">{{ req.fromDate }} to {{ req.toDate }}</div>
-                    </td>
-                    <td class="font-mono text-sm">{{ req.daysRequested }}</td>
-                    <td class="text-secondary max-width-200" :title="req.reason">
-                      <div class="text-truncate">{{ req.reason }}</div>
-                      <div v-if="req.attachmentName" class="mt-1">
-                        <button
-                          type="button"
-                          class="btn btn-ghost btn-xs text-primary flex items-center gap-1 p-0"
-                          style="border: none; background: transparent; cursor: pointer; color: var(--primary-color);"
-                          @click="triggerDownload(req.attachmentPath, req.attachmentName)"
+                  <tr v-if="isLoading" v-for="i in 3" :key="i" class="animate-pulse">
+                    <td><div class="skeleton-line" style="width: 60%"></div></td>
+                    <td><div class="skeleton-line-sm" style="width: 80%"></div></td>
+                    <td><div class="skeleton-line-sm" style="width: 40%"></div></td>
+                    <td><div class="skeleton-line-sm" style="width: 90%"></div></td>
+                    <td><div class="skeleton-line-sm" style="width: 50%"></div></td>
+                    <td></td>
+                  </tr>
+                  <template v-else>
+                    <tr v-for="req in filteredMyRequests" :key="req.id">
+                      <td class="font-semibold">{{ req.leaveType }}</td>
+                      <td>
+                        <div class="text-sm">{{ req.fromDate }} to {{ req.toDate }}</div>
+                      </td>
+                      <td class="font-mono text-sm">{{ req.daysRequested }}</td>
+                      <td class="text-secondary max-width-200" :title="req.reason">
+                        <div class="text-truncate">{{ req.reason }}</div>
+                        <div v-if="req.attachmentName" class="mt-1">
+                          <button
+                            type="button"
+                            class="btn btn-ghost btn-xs text-primary flex items-center gap-1 p-0"
+                            style="border: none; background: transparent; cursor: pointer; color: var(--primary-color);"
+                            @click="triggerDownload(req.attachmentPath, req.attachmentName)"
+                          >
+                            <IconHelper name="download" size="12" />
+                            <span class="text-xs font-semibold text-truncate max-width-200" style="display: inline-block;">{{ req.attachmentName }}</span>
+                          </button>
+                        </div>
+                      </td>
+                      <td>
+                        <span
+                          class="badge"
+                          :class="req.status === 'APPROVED' ? 'badge-success' : req.status === 'PENDING' ? 'badge-warning' : req.status === 'REJECTED' ? 'badge-danger' : 'badge-muted'"
                         >
-                          <IconHelper name="download" size="12" />
-                          <span class="text-xs font-semibold text-truncate max-width-200" style="display: inline-block;">{{ req.attachmentName }}</span>
+                          {{ req.status }}
+                        </span>
+                        <div v-if="req.comments" class="text-xs text-muted mt-1 italic">
+                          "{{ req.comments }}"
+                        </div>
+                      </td>
+                      <td class="text-right">
+                        <button
+                          v-if="req.status === 'PENDING'"
+                          class="btn btn-danger btn-sm px-2 py-6"
+                          @click="handleCancelRequest(req.id)"
+                        >
+                          Cancel
                         </button>
-                      </div>
-                    </td>
-                    <td>
-                      <span
-                        class="badge"
-                        :class="req.status === 'APPROVED' ? 'badge-success' : req.status === 'PENDING' ? 'badge-warning' : req.status === 'REJECTED' ? 'badge-danger' : 'badge-muted'"
-                      >
-                        {{ req.status }}
-                      </span>
-                      <div v-if="req.comments" class="text-xs text-muted mt-1 italic">
-                        "{{ req.comments }}"
-                      </div>
-                    </td>
-                    <td class="text-right">
-                      <button
-                        v-if="req.status === 'PENDING'"
-                        class="btn btn-danger btn-sm px-2 py-6"
-                        @click="handleCancelRequest(req.id)"
-                      >
-                        Cancel
-                      </button>
-                    </td>
-                  </tr>
-                  <tr v-if="filteredMyRequests.length === 0">
-                    <td colspan="6" class="text-center text-secondary">No leave requests found.</td>
-                  </tr>
+                      </td>
+                    </tr>
+                    <tr v-if="filteredMyRequests.length === 0">
+                      <td colspan="6" class="text-center p-8 text-secondary">
+                        <IconHelper name="calendar" size="36" class="mb-2 text-muted" />
+                        <p class="font-semibold text-sm">No Leave Requests Found</p>
+                        <p class="text-xs text-muted">Try adjusting your filters or apply for a new leave request.</p>
+                      </td>
+                    </tr>
+                  </template>
                 </tbody>
               </table>
             </div>
@@ -540,13 +595,13 @@ async function handleAddHoliday() {
       <div class="glass-card mb-6">
         <div class="flex justify-between items-center">
           <div class="flex items-center gap-4">
-            <button class="btn btn-secondary btn-sm" @click="prevMonth">
+            <button class="btn btn-secondary btn-sm" @click="prevMonth" title="Previous Month" aria-label="Previous Month">
               <IconHelper name="arrow-left" size="14" />
             </button>
             <h3 class="font-bold text-lg" style="min-width: 150px; text-align: center;">
               {{ monthNames[calMonth] }} {{ calYear }}
             </h3>
-            <button class="btn btn-secondary btn-sm" @click="nextMonth">
+            <button class="btn btn-secondary btn-sm" @click="nextMonth" title="Next Month" aria-label="Next Month">
               <IconHelper name="plus" size="14" style="transform: rotate(45deg);" />
             </button>
           </div>

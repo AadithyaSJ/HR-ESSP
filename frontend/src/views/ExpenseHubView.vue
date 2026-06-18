@@ -39,8 +39,20 @@ const limitGrade = ref('All Grades');
 const newCurrencyCode = ref('');
 const newCurrencyRate = ref('');
 
-onMounted(() => {
+const isLoading = ref(false);
+
+onMounted(async () => {
   activeTab.value = route.meta.tab || 'my-expenses';
+  isLoading.value = true;
+  try {
+    await hrStore.fetchEmployees();
+    if (authStore.user) {
+      await hrStore.fetchExpenses(authStore.user.id);
+    }
+    await new Promise(r => setTimeout(r, 500));
+  } finally {
+    isLoading.value = false;
+  }
 });
 
 function changeTab(tab) {
@@ -49,8 +61,23 @@ function changeTab(tab) {
 }
 
 // User claims
-const myClaims = computed(() => {
-  return hrStore.expenseClaims.filter(c => c.employeeCode === authStore.user.employeeCode);
+const searchQuery = ref('');
+const filterCategory = ref('All');
+const filterStatus = ref('All');
+
+const filteredMyClaims = computed(() => {
+  return hrStore.expenseClaims.filter(c => {
+    const isOwn = c.employeeCode === authStore.user.employeeCode;
+    if (!isOwn) return false;
+    
+    const matchSearch = !searchQuery.value || 
+                        c.description.toLowerCase().includes(searchQuery.value.toLowerCase()) || 
+                        c.id.toLowerCase().includes(searchQuery.value.toLowerCase());
+    const matchCategory = filterCategory.value === 'All' || c.category.toLowerCase() === filterCategory.value.toLowerCase();
+    const matchStatus = filterStatus.value === 'All' || c.status === filterStatus.value;
+    
+    return matchSearch && matchCategory && matchStatus;
+  });
 });
 
 // Drag & drop receipts
@@ -366,6 +393,42 @@ function handleAddCurrency() {
         <div class="col-8">
           <div class="glass-card">
             <h3 class="mb-6">Expense Claims History</h3>
+
+            <!-- FILTERS PANEL -->
+            <div class="grid-12 mb-4">
+              <div class="col-4 form-group m-0">
+                <label class="form-label text-xs">Search Description</label>
+                <input type="text" v-model="searchQuery" class="form-control text-xs" placeholder="Search by description..." />
+              </div>
+              <div class="col-4 form-group m-0">
+                <label class="form-label text-xs">Category</label>
+                <select v-model="filterCategory" class="form-control text-xs">
+                  <option value="All">All Categories</option>
+                  <option value="Travel">Travel</option>
+                  <option value="Accommodation">Accommodation</option>
+                  <option value="Meals">Meals</option>
+                  <option value="Broadband">Broadband</option>
+                  <option value="Mobile">Mobile</option>
+                  <option value="HomeOffice">Home Office</option>
+                  <option value="Wellness">Wellness</option>
+                  <option value="Certification">Certification</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div class="col-4 form-group m-0">
+                <label class="form-label text-xs">Status</label>
+                <select v-model="filterStatus" class="form-control text-xs">
+                  <option value="All">All Statuses</option>
+                  <option value="PENDING">Pending Manager</option>
+                  <option value="APPROVED_MANAGER">Pending Finance</option>
+                  <option value="APPROVED_FINANCE">Approved Finance</option>
+                  <option value="PAID">Paid</option>
+                  <option value="REJECTED">Rejected</option>
+                  <option value="CANCELLED">Cancelled</option>
+                </select>
+              </div>
+            </div>
+
             <div class="table-container">
               <table class="table">
                 <thead>
@@ -379,40 +442,54 @@ function handleAddCurrency() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="c in myClaims" :key="c.id">
-                    <td>
-                      <span class="font-semibold">{{ c.category }}</span>
-                    </td>
-                    <td>{{ c.date }}</td>
-                    <td class="font-mono">{{ c.currency }} {{ c.amount }}</td>
-                    <td>
-                      <a href="#" class="text-xs flex items-center gap-1 font-mono" @click.prevent="window.showPortalToast('Opening receipt PDF preview...', 'info')">
-                        <IconHelper name="file-text" size="14" />
-                        {{ c.receiptName }}
-                      </a>
-                    </td>
-                    <td>
-                      <span
-                        class="badge"
-                        :class="c.status === 'PAID' ? 'badge-success' : c.status === 'APPROVED_FINANCE' ? 'badge-success' : c.status === 'APPROVED_MANAGER' ? 'badge-info' : ['PENDING', 'PENDING_FINANCE'].includes(c.status) ? 'badge-warning' : 'badge-danger'"
-                      >
-                        {{ c.status.replace('_', ' ') }}
-                      </span>
-                    </td>
-                    <td class="text-right">
-                      <div class="flex gap-2 justify-end">
-                        <button class="btn btn-ghost btn-sm px-2" @click="openFinanceReview(c, 'VIEW')" title="View approval history timeline">
-                          <IconHelper name="clock" size="14" />
-                        </button>
-                        <button v-if="['PENDING', 'PENDING_FINANCE'].includes(c.status)" class="btn btn-danger btn-sm px-2 py-6" @click="handleCancelClaim(c.id)">
-                          Cancel
-                        </button>
-                      </div>
-                    </td>
+                  <tr v-if="isLoading" v-for="i in 3" :key="i" class="animate-pulse">
+                    <td><div class="skeleton-line" style="width: 50%"></div></td>
+                    <td><div class="skeleton-line-sm" style="width: 70%"></div></td>
+                    <td><div class="skeleton-line-sm" style="width: 60%"></div></td>
+                    <td><div class="skeleton-line-sm" style="width: 80%"></div></td>
+                    <td><div class="skeleton-line-sm" style="width: 40%"></div></td>
+                    <td></td>
                   </tr>
-                  <tr v-if="myClaims.length === 0">
-                    <td colspan="6" class="text-center text-secondary">No expense claims logged.</td>
-                  </tr>
+                  <template v-else>
+                    <tr v-for="c in filteredMyClaims" :key="c.id">
+                      <td>
+                        <span class="font-semibold">{{ c.category }}</span>
+                      </td>
+                      <td>{{ c.date }}</td>
+                      <td class="font-mono">{{ c.currency }} {{ c.amount }}</td>
+                      <td>
+                        <a href="#" class="text-xs flex items-center gap-1 font-mono" @click.prevent="window.showPortalToast('Opening receipt PDF preview...', 'info')">
+                          <IconHelper name="file-text" size="14" />
+                          {{ c.receiptName }}
+                        </a>
+                      </td>
+                      <td>
+                        <span
+                          class="badge"
+                          :class="c.status === 'PAID' ? 'badge-success' : c.status === 'APPROVED_FINANCE' ? 'badge-success' : c.status === 'APPROVED_MANAGER' ? 'badge-info' : ['PENDING', 'PENDING_FINANCE'].includes(c.status) ? 'badge-warning' : 'badge-danger'"
+                        >
+                          {{ c.status.replace('_', ' ') }}
+                        </span>
+                      </td>
+                      <td class="text-right">
+                        <div class="flex gap-2 justify-end">
+                          <button class="btn btn-ghost btn-sm px-2" @click="openFinanceReview(c, 'VIEW')" title="View approval history timeline" aria-label="View approval history timeline">
+                            <IconHelper name="clock" size="14" />
+                          </button>
+                          <button v-if="['PENDING', 'PENDING_FINANCE'].includes(c.status)" class="btn btn-danger btn-sm px-2 py-6" @click="handleCancelClaim(c.id)">
+                            Cancel
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                    <tr v-if="filteredMyClaims.length === 0">
+                      <td colspan="6" class="text-center p-8 text-secondary">
+                        <IconHelper name="credit-card" size="36" class="mb-2 text-muted" />
+                        <p class="font-semibold text-sm">No Expense Claims Found</p>
+                        <p class="text-xs text-muted">Try adjusting your filters or submit a new expense claim.</p>
+                      </td>
+                    </tr>
+                  </template>
                 </tbody>
               </table>
             </div>
@@ -573,7 +650,7 @@ function handleAddCurrency() {
                     <td>{{ l.frequency.replace('_', ' ') }}</td>
                     <td>{{ l.grade }}</td>
                     <td v-if="authStore.activeRole === 'FINANCE_ADMIN'" class="text-right">
-                      <button class="btn btn-ghost btn-sm text-danger-btn px-2" @click="handleDeactivateLimit(l.id)">
+                      <button class="btn btn-ghost btn-sm text-danger-btn px-2" @click="handleDeactivateLimit(l.id)" title="Deactivate policy limit rule" aria-label="Deactivate policy limit rule">
                         <IconHelper name="trash" size="14" />
                       </button>
                     </td>

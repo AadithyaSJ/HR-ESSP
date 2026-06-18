@@ -38,7 +38,12 @@ const routes = [
   // --- MAIN LAYOUT ROUTES ---
   {
     path: '/',
-    redirect: '/profile'
+    redirect: '/dashboard'
+  },
+  {
+    path: '/dashboard',
+    name: 'dashboard',
+    component: () => import('../views/DashboardView.vue')
   },
   {
     path: '/profile',
@@ -78,6 +83,12 @@ const routes = [
     meta: { tab: 'new-employee', roles: ['HR_ADMIN'] }
   },
   {
+    path: '/hr/employees/onboarding',
+    name: 'hr-employees-onboarding',
+    component: EmployeeDirectoryView,
+    meta: { tab: 'onboarding', roles: ['HR_ADMIN'] }
+  },
+  {
     path: '/hr/employees/:id',
     name: 'hr-employee-detail',
     component: EmployeeDirectoryView,
@@ -98,22 +109,35 @@ const routes = [
     meta: { tab: 'my-leaves' }
   },
   {
-    path: '/leave/calendar',
-    name: 'leave-calendar',
-    component: LeaveHubView,
-    meta: { tab: 'calendar' }
-  },
-  {
-    path: '/manager/leave',
-    name: 'manager-leave',
+    path: '/leave/requests',
+    name: 'leave-requests',
     component: LeaveHubView,
     meta: { tab: 'approvals', roles: ['MANAGER', 'HR_ADMIN'] }
   },
   {
-    path: '/admin/leave-policy',
-    name: 'admin-leave-policy',
+    path: '/leave/policies',
+    name: 'leave-policies',
     component: LeaveHubView,
     meta: { tab: 'policy', roles: ['HR_ADMIN'] }
+  },
+  {
+    path: '/leave/holidays',
+    name: 'leave-holidays',
+    component: LeaveHubView,
+    meta: { tab: 'calendar' }
+  },
+  // Legacy redirects
+  {
+    path: '/leave/calendar',
+    redirect: '/leave/holidays'
+  },
+  {
+    path: '/manager/leave',
+    redirect: '/leave/requests'
+  },
+  {
+    path: '/admin/leave-policy',
+    redirect: '/leave/policies'
   },
 
   // --- EXPENSE CLAIMS ---
@@ -260,10 +284,10 @@ const routes = [
     meta: { tab: 'preferences' }
   },
 
-  // Catch-all redirect to profile
+  // Catch-all redirect to dashboard
   {
     path: '/:pathMatch(.*)*',
-    redirect: '/profile'
+    redirect: '/dashboard'
   }
 ]
 
@@ -290,14 +314,14 @@ router.beforeEach((to, from, next) => {
     }
   }
 
-  // If logged in and going to login/forgot password, redirect to profile
+  // If logged in and going to login/forgot password, redirect to dashboard
   if (authStore.isAuthenticated && to.meta.public && to.name !== 'session-expired') {
-    next('/profile')
+    next('/dashboard')
   }
   // Role checks
   else if (to.meta.roles && !to.meta.roles.includes(authStore.activeRole)) {
-    // Redirect to profile if active role is not cleared
-    next('/profile')
+    // Redirect to dashboard if active role is not cleared
+    next('/dashboard')
   }
   else {
     next()

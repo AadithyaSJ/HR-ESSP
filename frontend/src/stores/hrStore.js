@@ -19,32 +19,95 @@ export const useHrStore = defineStore('hr', () => {
   // --- SEED EMPLOYEES ---
   const employees = ref([
     {
+      id: 'emp-106',
+      employeeCode: 'EMP001',
+      fullName: 'Sarah Johnson',
+      email: 'sarah.johnson@company.com',
+      phone: '+1 (555) 019-8833',
+      address: '742 Evergreen Terrace, Springfield',
+      department: 'Engineering',
+      designation: 'Senior Software Engineer',
+      managerId: 'emp-lisa',
+      managerName: 'Lisa Anderson',
+      managerContact: 'lisa.anderson@company.com',
+      joiningDate: '2022-03-15',
+      employmentType: 'Full-time',
+      role: 'EMPLOYEE',
+      salary: 1200000,
+      salaryBand: 'Band 2 (L2)',
+      status: 'ACTIVE',
+      photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+      onboardingPercent: 100,
+      onboardingStatus: 'APPROVED',
+      onboardingTasks: [],
+      bankDetails: {
+        accountNo: '22334455667',
+        ifsc: 'CBIN0280931',
+        bankName: 'Central Bank of India'
+      },
+      emergencyContact: {
+        name: 'Thomas Johnson',
+        relation: 'Father',
+        phone: '+1 (555) 019-8834'
+      },
+      documents: []
+    },
+    {
+      id: 'emp-108',
+      employeeCode: 'EMP002',
+      fullName: 'Michael Chen',
+      email: 'michael.chen@company.com',
+      phone: '+1 (555) 019-7755',
+      address: '555 California St, San Francisco',
+      department: 'Product',
+      designation: 'Product Manager',
+      managerId: 'emp-lisa',
+      managerName: 'Lisa Anderson',
+      managerContact: 'lisa.anderson@company.com',
+      joiningDate: '2021-07-10',
+      employmentType: 'Full-time',
+      role: 'EMPLOYEE',
+      salary: 1100000,
+      salaryBand: 'Band 2 (L2)',
+      status: 'ACTIVE',
+      photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+      onboardingPercent: 100,
+      onboardingStatus: 'APPROVED',
+      onboardingTasks: [],
+      bankDetails: {
+        accountNo: '44556677889',
+        ifsc: 'PNBB0093800',
+        bankName: 'Punjab National Bank'
+      },
+      emergencyContact: {
+        name: 'Linda Chen',
+        relation: 'Sister',
+        phone: '+1 (555) 019-7756'
+      },
+      documents: []
+    },
+    {
       id: 'emp-101',
-      employeeCode: 'EMP2026101',
-      fullName: 'Jane Doe',
-      email: 'jane.doe@company.com',
+      employeeCode: 'EMP003',
+      fullName: 'Emily Rodriguez',
+      email: 'emily.rodriguez@company.com',
       phone: '+91 98765 43210',
       address: '123 Cyber Towers, Hitec City, Hyderabad, India',
-      department: 'Engineering',
-      designation: 'Senior Frontend Developer',
-      managerId: 'emp-102',
-      managerName: 'Sarah Jenkins',
-      managerContact: 'sarah.j@company.com',
-      joiningDate: '2024-03-15',
+      department: 'Marketing',
+      designation: 'Marketing Manager',
+      managerId: 'emp-lisa',
+      managerName: 'Lisa Anderson',
+      managerContact: 'lisa.anderson@company.com',
+      joiningDate: '2022-01-20',
       employmentType: 'Full-time',
       role: 'EMPLOYEE',
       salary: 1400000,
       salaryBand: 'Band 3 (L3-L4)',
-      status: 'ACTIVE',
-      photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+      status: 'ON_LEAVE',
+      photo: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
       onboardingPercent: 100,
-      onboardingTasks: [
-        { id: 1, title: 'Acknowledge company policy documents', done: true },
-        { id: 2, title: 'Upload identity proof (Aadhaar / Passport)', done: true },
-        { id: 3, title: 'Fill personal details form', done: true },
-        { id: 4, title: 'Submit bank account details', done: true },
-        { id: 5, title: 'Add emergency contact', done: true }
-      ],
+      onboardingStatus: 'APPROVED',
+      onboardingTasks: [],
       bankDetails: {
         accountNo: '30948573620',
         ifsc: 'SBIN0003049',
@@ -55,33 +118,102 @@ export const useHrStore = defineStore('hr', () => {
         relation: 'Father',
         phone: '+91 98765 00001'
       },
-      documents: [
-        { name: 'Offer_Letter.pdf', size: '420 KB', date: '2024-03-01', type: 'HR' },
-        { name: 'Aadhaar_Card.pdf', size: '210 KB', date: '2024-03-15', type: 'Identity' },
-        { name: 'Degree_Certificate.pdf', size: '1.2 MB', date: '2024-03-15', type: 'Education' }
-      ]
+      documents: []
     },
     {
-      id: 'emp-102',
-      employeeCode: 'EMP2023102',
-      fullName: 'Sarah Jenkins',
-      email: 'sarah.j@company.com',
-      phone: '+91 98765 43211',
-      address: '456 Jubilee Hills, Hyderabad, India',
-      department: 'Engineering',
-      designation: 'Engineering Manager',
-      managerId: 'emp-103',
-      managerName: 'David Vance',
-      managerContact: 'david.v@company.com',
-      joiningDate: '2023-01-10',
+      id: 'emp-107',
+      employeeCode: 'EMP004',
+      fullName: 'David Kim',
+      email: 'david.kim@company.com',
+      phone: '+1 (555) 019-9944',
+      address: '10880 Wilshire Blvd, Los Angeles',
+      department: 'Sales',
+      designation: 'Sales Executive',
+      managerId: 'emp-lisa',
+      managerName: 'Lisa Anderson',
+      managerContact: 'lisa.anderson@company.com',
+      joiningDate: '2023-05-01',
       employmentType: 'Full-time',
-      role: 'MANAGER',
-      salary: 2800000,
+      role: 'EMPLOYEE',
+      salary: 1600000,
+      salaryBand: 'Band 3 (L3-L4)',
+      status: 'ACTIVE',
+      photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+      onboardingPercent: 100,
+      onboardingStatus: 'APPROVED',
+      onboardingTasks: [],
+      bankDetails: {
+        accountNo: '33445566778',
+        ifsc: 'BARB0JUBILE',
+        bankName: 'Bank of Baroda'
+      },
+      emergencyContact: {
+        name: 'Sook Kim',
+        relation: 'Mother',
+        phone: '+1 (555) 019-9945'
+      },
+      documents: []
+    },
+    {
+      id: 'emp-lisa',
+      employeeCode: 'EMP005',
+      fullName: 'Lisa Anderson',
+      email: 'lisa.anderson@company.com',
+      phone: '+1 (555) 019-2834',
+      address: 'Corporate Headquarters, NY',
+      department: 'HR',
+      designation: 'HR Manager',
+      managerId: null,
+      managerName: null,
+      managerContact: null,
+      joiningDate: '2020-09-15',
+      employmentType: 'Full-time',
+      role: 'HR_ADMIN',
+      salary: 2200000,
       salaryBand: 'Band 4 (L5-L6)',
       status: 'ACTIVE',
       photo: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
       onboardingPercent: 100,
+      onboardingStatus: 'APPROVED',
       onboardingTasks: [],
+      bankDetails: {
+        accountNo: '11223344556',
+        ifsc: 'HSBC0000102',
+        bankName: 'HSBC Bank'
+      },
+      emergencyContact: {
+        name: 'James Anderson',
+        relation: 'Spouse',
+        phone: '+1 (555) 019-2835'
+      },
+      documents: []
+    },
+    {
+      id: 'emp-102',
+      employeeCode: 'EMP006',
+      fullName: 'James Wilson',
+      email: 'james.wilson@company.com',
+      phone: '+91 98765 43211',
+      address: '456 Jubilee Hills, Hyderabad, India',
+      department: 'Engineering',
+      designation: 'Frontend Developer',
+      managerId: 'emp-lisa',
+      managerName: 'Lisa Anderson',
+      managerContact: 'lisa.anderson@company.com',
+      joiningDate: '2023-02-10',
+      employmentType: 'Full-time',
+      role: 'EMPLOYEE',
+      salary: 2800000,
+      salaryBand: 'Band 4 (L5-L6)',
+      status: 'ACTIVE',
+      photo: 'https://images.unsplash.com/photo-1519345182560-3f2917c472ef?w=150',
+      onboardingPercent: 67,
+      onboardingStatus: 'IN_PROGRESS',
+      onboardingTasks: [
+        { id: 1, title: 'Complete IT setup and system access', done: true, dueDate: 'Feb 15, 2026' },
+        { id: 2, title: 'Attend orientation session', done: true, dueDate: 'Feb 17, 2026' },
+        { id: 3, title: 'Submit documentation', done: false, dueDate: 'Jun 20, 2026' }
+      ],
       bankDetails: {
         accountNo: '48375620194',
         ifsc: 'HDFC0000201',
@@ -92,120 +224,7 @@ export const useHrStore = defineStore('hr', () => {
         relation: 'Spouse',
         phone: '+91 98765 11112'
       },
-      documents: [
-        { name: 'Offer_Letter.pdf', size: '430 KB', date: '2023-01-01', type: 'HR' }
-      ]
-    },
-    {
-      id: 'emp-103',
-      employeeCode: 'EMP2020103',
-      fullName: 'David Vance',
-      email: 'david.v@company.com',
-      phone: '+91 98765 43212',
-      address: '789 Gachibowli, Hyderabad, India',
-      department: 'Executive',
-      designation: 'VP of Engineering',
-      managerId: null,
-      managerName: null,
-      managerContact: null,
-      joiningDate: '2020-08-01',
-      employmentType: 'Full-time',
-      role: 'MANAGER',
-      salary: 4500000,
-      salaryBand: 'Band 5 (L7+)',
-      status: 'ACTIVE',
-      photo: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150',
-      onboardingPercent: 100,
-      onboardingTasks: [],
-      bankDetails: {
-        accountNo: '10928374650',
-        ifsc: 'ICIC0000001',
-        bankName: 'ICICI Bank'
-      },
-      emergencyContact: {
-        name: 'Elena Vance',
-        relation: 'Spouse',
-        phone: '+91 98765 22223'
-      },
-      documents: [
-        { name: 'Employment_Agreement.pdf', size: '1.5 MB', date: '2020-07-15', type: 'HR' }
-      ]
-    },
-    {
-      id: 'emp-104',
-      employeeCode: 'EMP2025104',
-      fullName: 'Vikram Mehta',
-      email: 'vikram.m@company.com',
-      phone: '+91 98765 43213',
-      address: 'Secunderabad, India',
-      department: 'HR',
-      designation: 'HR Lead',
-      managerId: 'emp-103',
-      managerName: 'David Vance',
-      managerContact: 'david.v@company.com',
-      joiningDate: '2025-05-01',
-      employmentType: 'Full-time',
-      role: 'HR_ADMIN',
-      salary: 1500000,
-      salaryBand: 'Band 3 (L3-L4)',
-      status: 'ACTIVE',
-      photo: 'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=150',
-      onboardingPercent: 80,
-      onboardingTasks: [
-        { id: 1, title: 'Acknowledge company policy documents', done: true },
-        { id: 2, title: 'Upload identity proof (Aadhaar / Passport)', done: true },
-        { id: 3, title: 'Fill personal details form', done: true },
-        { id: 4, title: 'Submit bank account details', done: true },
-        { id: 5, title: 'Add emergency contact', done: false }
-      ],
-      bankDetails: {
-        accountNo: '99887766554',
-        ifsc: 'KKBK0000123',
-        bankName: 'Kotak Mahindra'
-      },
-      emergencyContact: {
-        name: 'Kavita Mehta',
-        relation: 'Spouse',
-        phone: '+91 98765 33334'
-      },
-      documents: [
-        { name: 'Offer_Letter.pdf', size: '410 KB', date: '2025-04-10', type: 'HR' }
-      ]
-    },
-    {
-      id: 'emp-105',
-      employeeCode: 'EMP2024105',
-      fullName: 'Alice Sterling',
-      email: 'alice.s@company.com',
-      phone: '+91 98765 43214',
-      address: 'Financial District, Hyderabad, India',
-      department: 'Finance',
-      designation: 'Finance Controller',
-      managerId: 'emp-103',
-      managerName: 'David Vance',
-      managerContact: 'david.v@company.com',
-      joiningDate: '2024-11-01',
-      employmentType: 'Full-time',
-      role: 'FINANCE_ADMIN',
-      salary: 1800000,
-      salaryBand: 'Band 3 (L3-L4)',
-      status: 'ACTIVE',
-      photo: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-      onboardingPercent: 100,
-      onboardingTasks: [],
-      bankDetails: {
-        accountNo: '88776655443',
-        ifsc: 'AXIS0000101',
-        bankName: 'Axis Bank'
-      },
-      emergencyContact: {
-        name: 'George Sterling',
-        relation: 'Father',
-        phone: '+91 98765 44445'
-      },
-      documents: [
-        { name: 'Offer_Letter.pdf', size: '425 KB', date: '2024-10-15', type: 'HR' }
-      ]
+      documents: []
     }
   ]);
 
@@ -213,67 +232,80 @@ export const useHrStore = defineStore('hr', () => {
   const leaveRequests = ref([
     {
       id: 'lv-1',
-      employeeCode: 'EMP2026101',
-      fullName: 'Jane Doe',
-      department: 'Engineering',
+      employeeCode: 'EMP003',
+      fullName: 'Emily Rodriguez',
+      department: 'Marketing',
       leaveType: 'Annual',
       fromDate: '2026-06-15',
       toDate: '2026-06-18',
       daysRequested: 4,
       reason: 'Family trip to Munnar.',
-      status: 'PENDING',
-      approvedBy: null,
-      comments: null,
+      status: 'APPROVED',
+      approvedBy: 'Lisa Anderson',
+      comments: 'Approved.',
       createdAt: '2026-06-08T10:15:30Z'
     },
     {
-      id: 'lv-2',
-      employeeCode: 'EMP2026101',
-      fullName: 'Jane Doe',
+      id: 'lv-4',
+      employeeCode: 'EMP001',
+      fullName: 'Sarah Johnson',
       department: 'Engineering',
       leaveType: 'Sick',
-      fromDate: '2026-05-10',
-      toDate: '2026-05-11',
-      daysRequested: 2,
-      reason: 'Fever and cold. Bed rest recommended.',
-      status: 'APPROVED',
-      approvedBy: 'Sarah Jenkins',
-      comments: 'Take care and recover well!',
-      createdAt: '2026-05-10T08:00:00Z'
-    },
-    {
-      id: 'lv-3',
-      employeeCode: 'EMP2025104',
-      fullName: 'Vikram Mehta',
-      department: 'HR',
-      leaveType: 'Casual',
-      fromDate: '2026-06-25',
-      toDate: '2026-06-25',
-      daysRequested: 1,
-      reason: 'Personal work at the bank.',
+      fromDate: '2026-06-20',
+      toDate: '2026-06-22',
+      daysRequested: 3,
+      reason: 'Sick Leave - 3 days',
       status: 'PENDING',
       approvedBy: null,
       comments: null,
-      createdAt: '2026-06-09T09:30:00Z'
+      createdAt: '2026-06-17T09:30:00Z'
+    },
+    {
+      id: 'lv-5',
+      employeeCode: 'EMP004',
+      fullName: 'David Kim',
+      department: 'Sales',
+      leaveType: 'Personal',
+      fromDate: '2026-06-23',
+      toDate: '2026-06-24',
+      daysRequested: 2,
+      reason: 'Personal Leave - 2 days',
+      status: 'PENDING',
+      approvedBy: null,
+      comments: null,
+      createdAt: '2026-06-18T08:15:00Z'
     }
   ]);
 
   const leaveBalances = ref({
-    'EMP2026101': [
-      { type: 'Annual', accrued: 20, used: 4, remaining: 16, carryForward: 5 },
-      { type: 'Casual', accrued: 12, used: 2, remaining: 10, carryForward: 0 },
-      { type: 'Sick', accrued: 10, used: 2, remaining: 8, carryForward: 2 },
-      { type: 'Maternity', accrued: 180, used: 0, remaining: 180, carryForward: 0 },
-      { type: 'Paternity', accrued: 15, used: 0, remaining: 15, carryForward: 0 }
-    ],
-    'EMP2023102': [
-      { type: 'Annual', accrued: 25, used: 5, remaining: 20, carryForward: 8 },
-      { type: 'Casual', accrued: 12, used: 0, remaining: 12, carryForward: 0 },
-      { type: 'Sick', accrued: 10, used: 1, remaining: 9, carryForward: 3 }
-    ],
-    'EMP2025104': [
+    'EMP001': [
       { type: 'Annual', accrued: 20, used: 0, remaining: 20, carryForward: 0 },
-      { type: 'Casual', accrued: 12, used: 1, remaining: 11, carryForward: 0 },
+      { type: 'Casual', accrued: 12, used: 0, remaining: 12, carryForward: 0 },
+      { type: 'Sick', accrued: 10, used: 3, remaining: 7, carryForward: 0 }
+    ],
+    'EMP002': [
+      { type: 'Annual', accrued: 20, used: 0, remaining: 20, carryForward: 0 },
+      { type: 'Casual', accrued: 12, used: 0, remaining: 12, carryForward: 0 },
+      { type: 'Sick', accrued: 10, used: 0, remaining: 10, carryForward: 0 }
+    ],
+    'EMP003': [
+      { type: 'Annual', accrued: 20, used: 4, remaining: 16, carryForward: 5 },
+      { type: 'Casual', accrued: 12, used: 0, remaining: 12, carryForward: 0 },
+      { type: 'Sick', accrued: 10, used: 0, remaining: 10, carryForward: 0 }
+    ],
+    'EMP004': [
+      { type: 'Annual', accrued: 20, used: 0, remaining: 20, carryForward: 0 },
+      { type: 'Casual', accrued: 12, used: 0, remaining: 12, carryForward: 0 },
+      { type: 'Sick', accrued: 10, used: 0, remaining: 10, carryForward: 0 }
+    ],
+    'EMP005': [
+      { type: 'Annual', accrued: 25, used: 0, remaining: 25, carryForward: 8 },
+      { type: 'Casual', accrued: 12, used: 0, remaining: 12, carryForward: 0 },
+      { type: 'Sick', accrued: 10, used: 0, remaining: 10, carryForward: 0 }
+    ],
+    'EMP006': [
+      { type: 'Annual', accrued: 20, used: 0, remaining: 20, carryForward: 0 },
+      { type: 'Casual', accrued: 12, used: 0, remaining: 12, carryForward: 0 },
       { type: 'Sick', accrued: 10, used: 0, remaining: 10, carryForward: 0 }
     ]
   });
@@ -300,26 +332,27 @@ export const useHrStore = defineStore('hr', () => {
   const expenseClaims = ref([
     {
       id: 'exp-1',
-      employeeCode: 'EMP2026101',
-      fullName: 'Jane Doe',
-      department: 'Engineering',
+      employeeCode: 'EMP003',
+      fullName: 'Emily Rodriguez',
+      department: 'Marketing',
       category: 'Meals',
       amount: 1500,
       currency: 'INR',
       date: '2026-06-01',
       description: 'Client lunch with DotSolution technical architect.',
       receiptName: 'receipt_meals_0601.pdf',
-      status: 'PENDING',
+      status: 'PAID',
       timeline: [
-        { status: 'SUBMITTED', title: 'Submitted by Jane Doe', timestamp: '2026-06-01T14:20:00Z' }
+        { status: 'SUBMITTED', title: 'Submitted by Emily Rodriguez', timestamp: '2026-06-01T14:20:00Z' },
+        { status: 'PAID', title: 'Marked Paid', timestamp: '2026-06-03T16:00:00Z' }
       ],
-      paymentRef: null
+      paymentRef: 'TXN-9847582000'
     },
     {
       id: 'exp-2',
-      employeeCode: 'EMP2026101',
-      fullName: 'Jane Doe',
-      department: 'Engineering',
+      employeeCode: 'EMP003',
+      fullName: 'Emily Rodriguez',
+      department: 'Marketing',
       category: 'Travel',
       amount: 8500,
       currency: 'INR',
@@ -328,8 +361,8 @@ export const useHrStore = defineStore('hr', () => {
       receiptName: 'ticket_bgl_0512.pdf',
       status: 'PAID',
       timeline: [
-        { status: 'SUBMITTED', title: 'Submitted by Jane Doe', timestamp: '2026-05-12T10:00:00Z' },
-        { status: 'APPROVED_MANAGER', title: 'Approved by Sarah Jenkins (Manager)', timestamp: '2026-05-13T09:15:00Z' },
+        { status: 'SUBMITTED', title: 'Submitted by Emily Rodriguez', timestamp: '2026-05-12T10:00:00Z' },
+        { status: 'APPROVED_MANAGER', title: 'Approved by Lisa Anderson (Manager)', timestamp: '2026-05-13T09:15:00Z' },
         { status: 'APPROVED_FINANCE', title: 'Approved by Alice Sterling (Finance)', timestamp: '2026-05-14T11:30:00Z' },
         { status: 'PAID', title: 'Marked Paid by Alice Sterling', timestamp: '2026-05-15T16:00:00Z' }
       ],
@@ -337,19 +370,54 @@ export const useHrStore = defineStore('hr', () => {
     },
     {
       id: 'exp-3',
-      employeeCode: 'EMP2023102',
-      fullName: 'Sarah Jenkins',
+      employeeCode: 'EMP006',
+      fullName: 'James Wilson',
       department: 'Engineering',
-      category: 'Accommodation',
+      category: 'Meals',
       amount: 4500,
       currency: 'INR',
       date: '2026-06-02',
       description: 'Hotel stay during Bengaluru conference.',
       receiptName: 'hotel_bill_0602.pdf',
-      status: 'APPROVED_MANAGER',
+      status: 'PAID',
       timeline: [
-        { status: 'SUBMITTED', title: 'Submitted by Sarah Jenkins', timestamp: '2026-06-02T18:00:00Z' },
-        { status: 'APPROVED_MANAGER', title: 'Approved by David Vance (VP)', timestamp: '2026-06-03T11:00:00Z' }
+        { status: 'SUBMITTED', title: 'Submitted by James Wilson', timestamp: '2026-06-02T18:00:00Z' },
+        { status: 'APPROVED_MANAGER', title: 'Approved by Lisa Anderson (HR)', timestamp: '2026-06-03T11:00:00Z' },
+        { status: 'PAID', title: 'Marked Paid', timestamp: '2026-06-05T10:00:00Z' }
+      ],
+      paymentRef: 'TXN-9847582050'
+    },
+    {
+      id: 'exp-4',
+      employeeCode: 'EMP002',
+      fullName: 'Michael Chen',
+      department: 'Product',
+      category: 'Travel',
+      amount: 450,
+      currency: 'USD',
+      date: '2026-06-15',
+      description: 'Travel expenses for quarterly client review meeting.',
+      receiptName: 'receipt_travel_chen.pdf',
+      status: 'PENDING',
+      timeline: [
+        { status: 'SUBMITTED', title: 'Submitted by Michael Chen', timestamp: '2026-06-15T09:00:00Z' }
+      ],
+      paymentRef: null
+    },
+    {
+      id: 'exp-5',
+      employeeCode: 'EMP001',
+      fullName: 'Sarah Johnson',
+      department: 'Engineering',
+      category: 'Equipment',
+      amount: 120,
+      currency: 'USD',
+      date: '2026-06-16',
+      description: 'Wireless ergonomic mouse & mechanical keyboard.',
+      receiptName: 'receipt_keyboard_johnson.pdf',
+      status: 'PENDING',
+      timeline: [
+        { status: 'SUBMITTED', title: 'Submitted by Sarah Johnson', timestamp: '2026-06-16T14:30:00Z' }
       ],
       paymentRef: null
     }
@@ -1164,7 +1232,10 @@ export const useHrStore = defineStore('hr', () => {
       salaryBand: data.salaryBand || 'Band 1 (L1-L2)',
       status: 'ACTIVE',
       role: data.role,
-      onboardingPercent: 0
+      onboardingPercent: 0,
+      emergencyName: data.emergencyName || '',
+      emergencyRelation: data.emergencyRelation || 'Emergency',
+      emergencyPhone: data.emergencyPhone || ''
     };
 
     const created = await apiRequest('/api/v1/employees', {
@@ -1200,6 +1271,8 @@ export const useHrStore = defineStore('hr', () => {
       experience: '',
       certificates: '',
       welcomeLink: welcomeLink,
+      dob: data.dob || '',
+      workLocation: data.workLocation || 'Remote',
       onboardingTasks: [
         { id: 1, title: 'Acknowledge company policy documents', done: false },
         { id: 2, title: 'Upload identity proof (Aadhaar / Passport)', done: false },
@@ -1208,7 +1281,11 @@ export const useHrStore = defineStore('hr', () => {
         { id: 5, title: 'Add emergency contact', done: false }
       ],
       bankDetails: { accountNo: '', ifsc: '', bankName: '' },
-      emergencyContact: { name: '', relation: '', phone: '' },
+      emergencyContact: {
+        name: created.emergencyName || data.emergencyName || '',
+        relation: created.emergencyRelation || data.emergencyRelation || 'Emergency',
+        phone: created.emergencyPhone || data.emergencyPhone || ''
+      },
       documents: []
     };
 
@@ -1465,6 +1542,12 @@ export const useHrStore = defineStore('hr', () => {
     try {
       const data = await apiRequest('/api/v1/employees');
       if (data && data.length > 0) {
+        // Preserve seed-only fields (onboardingTasks, photo, etc.) by merging with existing data
+        const existingMap = {};
+        employees.value.forEach(e => {
+          existingMap[e.employeeCode] = e;
+        });
+
         employees.value = data.map(emp => {
           const docs = emp.certificates ? emp.certificates.split(',').map(name => ({
             name: name,
@@ -1472,6 +1555,9 @@ export const useHrStore = defineStore('hr', () => {
             date: new Date().toISOString().split('T')[0],
             type: 'Education'
           })) : [];
+
+          // Find existing seed employee to preserve onboarding data
+          const existing = existingMap[emp.employeeCode];
 
           return {
             id: emp.id,
@@ -1483,32 +1569,43 @@ export const useHrStore = defineStore('hr', () => {
             department: emp.department,
             designation: emp.designation,
             managerId: emp.managerId,
-            managerName: emp.managerId ? 'Sarah Jenkins' : null,
+            managerName: existing?.managerName || (emp.managerId ? 'Sarah Jenkins' : null),
+            managerContact: existing?.managerContact || '',
             joiningDate: emp.joiningDate,
-            employmentType: 'Full-time',
+            employmentType: existing?.employmentType || 'Full-time',
             role: emp.employeeCode === 'EMP001' ? 'HR_ADMIN' : emp.employeeCode === 'EMP002' ? 'MANAGER' : emp.employeeCode === 'EMP003' ? 'FINANCE_ADMIN' : emp.employeeCode === 'EMP005' ? 'SYSTEM_ADMIN' : 'EMPLOYEE',
             salary: emp.salary,
             salaryBand: emp.salaryBand,
             status: emp.status,
-            onboardingPercent: emp.onboardingPercent,
-            onboardingStatus: emp.onboardingStatus || 'APPROVED',
-            school: emp.school || '',
-            college: emp.college || '',
-            experience: emp.experience || '',
-            certificates: emp.certificates || '',
+            photo: existing?.photo || '',
+            onboardingPercent: emp.onboardingPercent ?? existing?.onboardingPercent ?? 100,
+            onboardingStatus: emp.onboardingStatus || existing?.onboardingStatus || 'APPROVED',
+            onboardingTasks: existing?.onboardingTasks || [],
+            school: emp.school || existing?.school || '',
+            college: emp.college || existing?.college || '',
+            experience: emp.experience || existing?.experience || '',
+            certificates: emp.certificates || existing?.certificates || '',
             bankDetails: {
-              accountNo: emp.bankAccountNo,
-              ifsc: emp.bankIfsc,
-              bankName: emp.bankName
+              accountNo: emp.bankAccountNo || existing?.bankDetails?.accountNo || '',
+              ifsc: emp.bankIfsc || existing?.bankDetails?.ifsc || '',
+              bankName: emp.bankName || existing?.bankDetails?.bankName || ''
             },
             emergencyContact: {
-              name: emp.emergencyName,
-              relation: emp.emergencyRelation,
-              phone: emp.emergencyPhone
+              name: emp.emergencyName || existing?.emergencyContact?.name || '',
+              relation: emp.emergencyRelation || existing?.emergencyContact?.relation || '',
+              phone: emp.emergencyPhone || existing?.emergencyContact?.phone || ''
             },
             documents: docs
           };
         });
+
+        // Also keep seed-only employees not returned by API (e.g. James Wilson for onboarding)
+        const apiCodes = new Set(data.map(e => e.employeeCode));
+        const seedOnly = Object.values(existingMap).filter(e => !apiCodes.has(e.employeeCode));
+        if (seedOnly.length > 0) {
+          employees.value = [...employees.value, ...seedOnly];
+        }
+
         backendConnected.value = true;
       }
     } catch (e) {
