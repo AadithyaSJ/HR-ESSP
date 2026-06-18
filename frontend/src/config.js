@@ -1,2 +1,2 @@
 // Central configurations for the frontend portal
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+export const API_BASE_URL = 'https://hfw6035g-8080.inc1.devtunnels.ms';
