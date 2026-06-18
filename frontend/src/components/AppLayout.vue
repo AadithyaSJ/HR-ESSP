@@ -14,6 +14,10 @@ const isSidebarCollapsed = ref(false);
 const isNotificationOpen = ref(false);
 const isProfileOpen = ref(false);
 
+const hasReports = computed(() => {
+  return hrStore.employees.some(e => e.managerId === authStore.user?.id);
+});
+
 // Auto-trigger idle warning check
 onMounted(() => {
   authStore.startIdleTimer(router);
@@ -62,7 +66,7 @@ const menuGroups = computed(() => {
       items: [
         { name: 'My Profile', icon: 'user', path: '/profile', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] },
         { name: 'Onboarding Checklist', icon: 'clipboard', path: '/onboarding', roles: ['EMPLOYEE', 'HR_ADMIN'] },
-        { name: 'My Documents', icon: 'file-text', path: '/documents', roles: ['EMPLOYEE', 'MANAGER'] }
+        { name: 'My Documents', icon: 'file-text', path: '/documents', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] }
       ]
     },
     {
@@ -72,7 +76,6 @@ const menuGroups = computed(() => {
         { name: 'Leave Calendar', icon: 'calendar', path: '/leave/calendar', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] },
         { name: 'Team Leaves', icon: 'check', path: '/manager/leave', roles: ['MANAGER', 'HR_ADMIN'] },
         { name: 'My Expenses', icon: 'credit-card', path: '/expense', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] },
-        { name: 'Team Expenses', icon: 'check-circle', path: '/manager/expense', roles: ['MANAGER'] },
         { name: 'Finance Expense Queue', icon: 'credit-card', path: '/finance/expense', roles: ['FINANCE_ADMIN'] }
       ]
     },
@@ -103,8 +106,8 @@ const menuGroups = computed(() => {
       title: 'System Config',
       items: [
         { name: 'Leave Policy Config', icon: 'settings', path: '/admin/leave-policy', roles: ['HR_ADMIN'] },
-        { name: 'Expense Limits Config', icon: 'settings', path: '/admin/expense-limits', roles: ['HR_ADMIN'] },
-        { name: 'Currency Rates', icon: 'settings', path: '/admin/currency-rates', roles: ['HR_ADMIN', 'FINANCE_ADMIN'] },
+        { name: 'Expense Limits Config', icon: 'settings', path: '/admin/expense-limits', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] },
+        { name: 'Currency Rates', icon: 'settings', path: '/admin/currency-rates', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] },
         { name: 'System Settings', icon: 'settings', path: '/admin/settings', roles: ['SYSTEM_ADMIN'] },
         { name: 'User Management', icon: 'users', path: '/admin/users', roles: ['SYSTEM_ADMIN'] },
         { name: 'Email Templates', icon: 'file-text', path: '/admin/email-templates', roles: ['HR_ADMIN', 'SYSTEM_ADMIN'] },
@@ -116,7 +119,10 @@ const menuGroups = computed(() => {
 
   return groups.map(g => ({
     ...g,
-    items: g.items.filter(item => item.roles.includes(role))
+    items: g.items.filter(item => {
+      if (item.path === '/manager/leave' && hasReports.value) return true;
+      return item.roles.includes(role);
+    })
   })).filter(g => g.items.length > 0);
 });
 

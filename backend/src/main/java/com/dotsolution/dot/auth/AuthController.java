@@ -1,5 +1,6 @@
 package com.dotsolution.dot.auth;
 
+import com.dotsolution.dot.auth.dto.CreatePasswordRequest;
 import com.dotsolution.dot.auth.dto.LoginRequest;
 import com.dotsolution.dot.auth.dto.LoginResponse;
 import com.dotsolution.dot.auth.entity.User;
@@ -115,5 +116,45 @@ public class AuthController {
         }
         // Simulate SES triggers
         return ResponseEntity.ok(ApiResponse.success("Reset link dispatched via AWS SES successfully"));
+    }
+
+    @PostMapping("/create-password")
+    public ResponseEntity<ApiResponse<LoginResponse>> createPassword(@RequestBody @Valid CreatePasswordRequest request) {
+        Optional<User> userOpt = userRepository.findByEmail(request.getEmail());
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("User account not found"));
+        }
+
+        User user = userOpt.get();
+        Optional<Employee> empOpt = employeeRepository.findByEmployeeCode(user.getEmployeeId());
+        if (empOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("Employee profile not found"));
+        }
+
+        Employee employee = empOpt.get();
+        if (!"PENDING_DETAILS".equals(employee.getOnboardingStatus())) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error("Employee is not in the password creation stage or onboarding is already completed"));
+        }
+
+        // Hash and save new password
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        userRepository.save(user);
+
+        // Generate JWT token and log user in automatically
+        String roleName = user.getRole().getRoleName();
+        String token = jwtUtil.generateToken(user.getEmail(), roleName, user.getEmployeeId());
+
+        LoginResponse response = LoginResponse.builder()
+                .token(token)
+                .email(user.getEmail())
+                .fullName(employee.getName())
+                .role(roleName)
+                .employeeCode(user.getEmployeeId())
+                .build();
+
+        return ResponseEntity.ok(ApiResponse.success(response, "Password set successfully, welcome to the portal!"));
     }
 }

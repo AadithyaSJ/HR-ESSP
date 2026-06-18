@@ -5,15 +5,26 @@ import com.dotsolution.dot.employee.entity.Employee;
 import com.dotsolution.dot.employee.repository.EmployeeRepository;
 import com.dotsolution.dot.payroll.entity.Payslip;
 import com.dotsolution.dot.payroll.repository.PayslipRepository;
+import com.dotsolution.dot.leave.LeaveService;
+import com.dotsolution.dot.leave.entity.LeaveBalance;
+import com.dotsolution.dot.leave.entity.LeaveRequest;
+import com.dotsolution.dot.leave.repository.LeaveBalanceRepository;
+import com.dotsolution.dot.leave.repository.LeaveRequestRepository;
+import com.dotsolution.dot.expense.entity.ExpenseClaim;
+import com.dotsolution.dot.expense.repository.ExpenseClaimRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.io.BufferedReader;
 import java.io.StringReader;
+import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @Transactional
@@ -24,6 +35,18 @@ public class PayrollService {
 
     @Autowired
     private EmployeeRepository employeeRepository;
+
+    @Autowired
+    private LeaveRequestRepository leaveRequestRepository;
+
+    @Autowired
+    private LeaveBalanceRepository leaveBalanceRepository;
+
+    @Autowired
+    private ExpenseClaimRepository expenseClaimRepository;
+
+    @Autowired
+    private LeaveService leaveService;
 
     public List<Payslip> getPayslipsForEmployee(UUID employeeId, boolean includeUnpublished) {
         if (includeUnpublished) {
@@ -87,5 +110,169 @@ public class PayrollService {
             p.setPublished(true);
             payslipRepository.save(p);
         }
+    }
+
+    public List<Payslip> generatePayslips(String month, Integer year) {
+        List<Employee> employees = employeeRepository.findAll();
+        List<Payslip> generated = new ArrayList<>();
+
+        for (Employee emp : employees) {
+            if (!"ACTIVE".equalsIgnoreCase(emp.getStatus())) {
+                continue;
+            }
+
+            // Check if published payslip already exists
+            List<Payslip> existing = payslipRepository.findByEmployeeId(emp.getId());
+            boolean hasPublished = false;
+            Payslip draftToOverwrite = null;
+            for (Payslip p : existing) {
+                if (p.getMonth().equalsIgnoreCase(month) && p.getYear().equals(year)) {
+                    if (p.getPublished()) {
+                        hasPublished = true;
+                    } else {
+                        draftToOverwrite = p;
+                    }
+                }
+            }
+
+            if (hasPublished) {
+                continue;
+            }
+
+            double baseMonthlySalary = emp.getSalary() != null ? emp.getSalary() / 12.0 : 80000.0;
+
+            // Calculate unpaid leaves / leaves taken over limit
+            double unpaidLeaveDays = calculateUnpaidLeaveDays(emp, month, year);
+            double leaveDeduction = Math.round(unpaidLeaveDays * (baseMonthlySalary / 30.0));
+
+            // Calculate approved expense claims
+            double approvedExpenses = calculateApprovedExpenses(emp.getId(), month, year);
+
+            // Gross Pay = baseMonthlySalary - leaveDeduction + approvedExpenses
+            double gross = Math.max(0.0, Math.round(baseMonthlySalary - leaveDeduction + approvedExpenses));
+
+            // Deduction = 12% of basic taxable salary
+            double taxableSalary = Math.max(0.0, baseMonthlySalary - leaveDeduction);
+            double deduction = Math.round(taxableSalary * 0.12);
+
+            // Net Pay = Gross Pay - Deduction
+            double net = Math.max(0.0, gross - deduction);
+
+            String pdfUrl = "http://localhost:9000/payslips/" + emp.getEmployeeCode().toLowerCase() + "-" + month.toLowerCase() + "-" + year + ".pdf";
+
+            Payslip payslip;
+            if (draftToOverwrite != null) {
+                payslip = draftToOverwrite;
+                payslip.setGrossPay(gross);
+                payslip.setDeduction(deduction);
+                payslip.setNetPay(net);
+                payslip.setPdfUrl(pdfUrl);
+            } else {
+                payslip = Payslip.builder()
+                        .employeeId(emp.getId())
+                        .month(month)
+                        .year(year)
+                        .grossPay(gross)
+                        .deduction(deduction)
+                        .netPay(net)
+                        .pdfUrl(pdfUrl)
+                        .published(false)
+                        .build();
+            }
+
+            generated.add(payslipRepository.save(payslip));
+        }
+        return generated;
+    }
+
+    private double calculateUnpaidLeaveDays(Employee emp, String monthName, int year) {
+        java.time.Month targetMonth;
+        try {
+            targetMonth = java.time.Month.valueOf(monthName.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return 0.0;
+        }
+
+        List<LeaveRequest> requests = leaveRequestRepository.findByEmployeeId(emp.getId());
+        List<LeaveRequest> approvedRequests = requests.stream()
+                .filter(r -> "APPROVED".equalsIgnoreCase(r.getStatus()))
+                .filter(r -> r.getStartDate().getYear() == year || r.getEndDate().getYear() == year)
+                .sorted(java.util.Comparator.comparing(LeaveRequest::getStartDate))
+                .collect(Collectors.toList());
+
+        Map<String, Integer> approvedDaysPerType = new HashMap<>();
+        for (LeaveRequest r : approvedRequests) {
+            LocalDate current = r.getStartDate();
+            int daysInYear = 0;
+            while (!current.isAfter(r.getEndDate())) {
+                if (current.getYear() == year) {
+                    long isWorkingDay = leaveService.calculateLeaveDays(emp.getId(), current, current);
+                    if (isWorkingDay > 0) {
+                        daysInYear++;
+                    }
+                }
+                current = current.plusDays(1);
+            }
+            approvedDaysPerType.put(r.getLeaveType(), approvedDaysPerType.getOrDefault(r.getLeaveType(), 0) + daysInYear);
+        }
+
+        List<LeaveBalance> balances = leaveBalanceRepository.findByEmployeeId(emp.getId());
+        Map<String, Integer> limits = new HashMap<>();
+        for (LeaveBalance b : balances) {
+            if (b.getYear() == year) {
+                int approvedInYear = approvedDaysPerType.getOrDefault(b.getLeaveType(), 0);
+                limits.put(b.getLeaveType(), b.getBalance() + approvedInYear);
+            }
+        }
+
+        double totalUnpaidDaysInMonth = 0.0;
+        Map<String, Integer> cumulativeDays = new HashMap<>();
+
+        for (LeaveRequest r : approvedRequests) {
+            String leaveType = r.getLeaveType();
+            int limit = limits.getOrDefault(leaveType, 0);
+            if ("UNPAID".equalsIgnoreCase(leaveType) || "LWP".equalsIgnoreCase(leaveType)) {
+                limit = 0;
+            }
+
+            LocalDate current = r.getStartDate();
+            while (!current.isAfter(r.getEndDate())) {
+                long isWorkingDay = leaveService.calculateLeaveDays(emp.getId(), current, current);
+                if (isWorkingDay > 0) {
+                    cumulativeDays.put(leaveType, cumulativeDays.getOrDefault(leaveType, 0) + 1);
+                    int currentAccum = cumulativeDays.get(leaveType);
+                    if (current.getYear() == year && current.getMonth() == targetMonth) {
+                        if (currentAccum > limit) {
+                            totalUnpaidDaysInMonth += 1.0;
+                        }
+                    }
+                }
+                current = current.plusDays(1);
+            }
+        }
+
+        return totalUnpaidDaysInMonth;
+    }
+
+    private double calculateApprovedExpenses(UUID employeeId, String monthName, int year) {
+        java.time.Month targetMonth;
+        try {
+            targetMonth = java.time.Month.valueOf(monthName.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return 0.0;
+        }
+
+        List<ExpenseClaim> claims = expenseClaimRepository.findByEmployeeId(employeeId);
+        double totalExpenses = 0.0;
+        for (ExpenseClaim claim : claims) {
+            if (claim.getCreatedAt() != null &&
+                    claim.getCreatedAt().getYear() == year &&
+                    claim.getCreatedAt().getMonth() == targetMonth) {
+                if ("APPROVED".equalsIgnoreCase(claim.getStatus()) || "PAID".equalsIgnoreCase(claim.getStatus())) {
+                    totalExpenses += claim.getAmount();
+                }
+            }
+        }
+        return totalExpenses;
     }
 }

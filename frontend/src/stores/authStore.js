@@ -10,7 +10,8 @@ export const useAuthStore = defineStore('auth', () => {
     email: '',
     role: 'EMPLOYEE',
     department: '',
-    designation: ''
+    designation: '',
+    onboardingStatus: 'APPROVED'
   });
 
   const isAuthenticated = ref(false); // Change default to false for real security
@@ -80,7 +81,8 @@ export const useAuthStore = defineStore('auth', () => {
         email: data.email,
         role: data.role,
         department: profile?.department || '',
-        designation: profile?.designation || ''
+        designation: profile?.designation || '',
+        onboardingStatus: profile?.onboardingStatus || 'APPROVED'
       };
 
       activeRole.value = data.role;
@@ -124,7 +126,8 @@ export const useAuthStore = defineStore('auth', () => {
         email: data.email,
         role: data.role,
         department: profile?.department || '',
-        designation: profile?.designation || ''
+        designation: profile?.designation || '',
+        onboardingStatus: profile?.onboardingStatus || 'APPROVED'
       };
 
       activeRole.value = data.role;
@@ -146,6 +149,52 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function createPassword(email, password) {
+    try {
+      const data = await apiRequest('/api/auth/create-password', {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+      });
+      
+      localStorage.setItem('jwt_token', data.token);
+      
+      let profile = null;
+      try {
+        profile = await apiRequest(`/api/v1/employees/code/${data.employeeCode}`);
+      } catch (e) {
+        // Fallback profile if employee not created yet
+      }
+
+      user.value = {
+        id: profile?.id || 'emp-id',
+        employeeCode: data.employeeCode,
+        fullName: data.fullName,
+        email: data.email,
+        role: data.role,
+        department: profile?.department || '',
+        designation: profile?.designation || '',
+        onboardingStatus: profile?.onboardingStatus || 'APPROVED'
+      };
+
+      activeRole.value = data.role;
+      isAuthenticated.value = true;
+      resetIdleTimer();
+      
+      try {
+        const { useHrStore } = await import('./hrStore');
+        const hrStore = useHrStore();
+        await hrStore.syncAll(profile?.id, profile?.id);
+      } catch (e) {
+        console.warn('Sync failed on create password login:', e);
+      }
+
+      return true;
+    } catch (e) {
+      isAuthenticated.value = false;
+      throw e;
+    }
+  }
+
   function logout() {
     localStorage.removeItem('jwt_token');
     user.value = {
@@ -155,7 +204,8 @@ export const useAuthStore = defineStore('auth', () => {
       email: '',
       role: 'EMPLOYEE',
       department: '',
-      designation: ''
+      designation: '',
+      onboardingStatus: 'APPROVED'
     };
     isAuthenticated.value = false;
     stopIdleTimer();
@@ -175,6 +225,7 @@ export const useAuthStore = defineStore('auth', () => {
     setRole,
     login,
     loginSSO,
+    createPassword,
     logout
   };
 });

@@ -2,6 +2,19 @@ import { defineStore } from 'pinia';
 import { ref } from 'vue';
 import { apiRequest } from '../utils/api';
 
+function convertMonthToYyyyMm(monthStr, year) {
+  if (!monthStr) return '';
+  if (monthStr.includes('-') && !isNaN(monthStr.split('-')[0])) {
+    return monthStr;
+  }
+  const months = {
+    january: '01', february: '02', march: '03', april: '04', may: '05', june: '06',
+    july: '07', august: '08', september: '09', october: '10', november: '11', december: '12'
+  };
+  const m = months[String(monthStr).trim().toLowerCase()] || '01';
+  return `${year}-${m}`;
+}
+
 export const useHrStore = defineStore('hr', () => {
   // --- SEED EMPLOYEES ---
   const employees = ref([
@@ -344,9 +357,14 @@ export const useHrStore = defineStore('hr', () => {
 
   const expenseLimits = ref([
     { id: 'lim-1', category: 'Meals', maxAmount: 2000, frequency: 'PER_DAY', grade: 'All Grades' },
-    { id: 'lim-2', category: 'Travel', maxAmount: 15000, frequency: 'PER_TRIP', grade: 'All Grades' },
-    { id: 'lim-3', category: 'Accommodation', maxAmount: 8000, frequency: 'PER_NIGHT', grade: 'Grade L5+' },
-    { id: 'lim-4', category: 'Accommodation', maxAmount: 5000, frequency: 'PER_NIGHT', grade: 'Grade L1-L4' }
+    { id: 'lim-2', category: 'Travel', maxAmount: 20000, frequency: 'PER_TRIP', grade: 'All Grades' },
+    { id: 'lim-3', category: 'Accommodation', maxAmount: 10000, frequency: 'PER_NIGHT', grade: 'Grade L5+' },
+    { id: 'lim-4', category: 'Accommodation', maxAmount: 6000, frequency: 'PER_NIGHT', grade: 'Grade L1-L4' },
+    { id: 'lim-5', category: 'Broadband', maxAmount: 2000, frequency: 'PER_MONTH', grade: 'All Grades' },
+    { id: 'lim-6', category: 'Mobile', maxAmount: 1200, frequency: 'PER_MONTH', grade: 'All Grades' },
+    { id: 'lim-7', category: 'HomeOffice', maxAmount: 15000, frequency: 'PER_YEAR', grade: 'All Grades' },
+    { id: 'lim-8', category: 'Wellness', maxAmount: 3000, frequency: 'PER_MONTH', grade: 'All Grades' },
+    { id: 'lim-9', category: 'Certification', maxAmount: 40000, frequency: 'PER_YEAR', grade: 'All Grades' }
   ]);
 
   const currencyRates = ref([
@@ -429,7 +447,11 @@ export const useHrStore = defineStore('hr', () => {
     leaveModuleEnabled: true,
     payrollModuleEnabled: true,
     version: 'v1.4.2-RELEASE',
-    environment: 'Staging (AWS ECS Fargate)'
+    environment: 'Staging (AWS ECS Fargate)',
+    emailJsServiceId: 'service_z913fuu',
+    emailJsTemplateId: 'template_2mgjka9',
+    emailJsPublicKey: 'rA7PvZze2DIvgX8WR',
+    emailJsPrivateKey: 'uRt0bEDyyVvuKCVnzAjET'
   });
 
   const emailTemplates = ref([
@@ -475,35 +497,66 @@ export const useHrStore = defineStore('hr', () => {
   }
 
   // Employee actions
-  function updateEmployeeProfile(empId, data, activeUserEmail) {
+  async function updateEmployeeProfile(empId, data, activeUserEmail) {
     const idx = employees.value.findIndex(e => e.id === empId);
     if (idx !== -1) {
-      employees.value[idx] = {
-        ...employees.value[idx],
-        phone: data.phone || employees.value[idx].phone,
-        address: data.address || employees.value[idx].address,
-        emergencyContact: {
-          ...employees.value[idx].emergencyContact,
+      const emp = employees.value[idx];
+      emp.phone = data.phone || emp.phone;
+      emp.address = data.address || emp.address;
+      if (data.emergencyContact) {
+        emp.emergencyContact = {
+          ...emp.emergencyContact,
           ...data.emergencyContact
-        },
-        bankDetails: {
-          ...employees.value[idx].bankDetails,
+        };
+      }
+      if (data.bankDetails) {
+        emp.bankDetails = {
+          ...emp.bankDetails,
           ...data.bankDetails
-        }
-      };
+        };
+      }
       
       // Document upload
       if (data.newDocument) {
-        employees.value[idx].documents.push(data.newDocument);
+        emp.documents.push(data.newDocument);
       }
       
+      // Map to backend entity structure
+      const backendEmp = {
+        id: emp.id,
+        employeeCode: emp.employeeCode,
+        name: emp.fullName,
+        email: emp.email,
+        phone: emp.phone,
+        address: emp.address,
+        department: emp.department,
+        designation: emp.designation,
+        bankAccountNo: emp.bankDetails.accountNo,
+        bankIfsc: emp.bankDetails.ifsc,
+        bankName: emp.bankDetails.bankName,
+        emergencyName: emp.emergencyContact.name,
+        emergencyRelation: emp.emergencyContact.relation,
+        emergencyPhone: emp.emergencyContact.phone,
+        onboardingPercent: emp.onboardingPercent,
+        managerId: emp.managerId,
+        joiningDate: emp.joiningDate,
+        status: emp.status,
+        salary: emp.salary,
+        salaryBand: emp.salaryBand
+      };
+
+      await apiRequest(`/api/v1/employees/${empId}`, {
+        method: 'PUT',
+        body: JSON.stringify(backendEmp)
+      });
+
       addLog(activeUserEmail, 'Employee', 'UPDATE_PROFILE', `Updated profile details for employee ID ${empId}`);
       return true;
     }
     return false;
   }
 
-  function toggleOnboardingTask(empId, taskId, activeUserEmail) {
+  async function toggleOnboardingTask(empId, taskId, activeUserEmail) {
     const emp = employees.value.find(e => e.id === empId);
     if (emp && emp.onboardingTasks) {
       const t = emp.onboardingTasks.find(x => x.id === taskId);
@@ -514,49 +567,102 @@ export const useHrStore = defineStore('hr', () => {
         const doneCount = emp.onboardingTasks.filter(x => x.done).length;
         emp.onboardingPercent = Math.round((doneCount / emp.onboardingTasks.length) * 100);
         
+        // Save update to DB
+        const backendEmp = {
+          id: emp.id,
+          employeeCode: emp.employeeCode,
+          name: emp.fullName,
+          email: emp.email,
+          phone: emp.phone,
+          address: emp.address,
+          department: emp.department,
+          designation: emp.designation,
+          bankAccountNo: emp.bankDetails.accountNo,
+          bankIfsc: emp.bankDetails.ifsc,
+          bankName: emp.bankDetails.bankName,
+          emergencyName: emp.emergencyContact.name,
+          emergencyRelation: emp.emergencyContact.relation,
+          emergencyPhone: emp.emergencyContact.phone,
+          onboardingPercent: emp.onboardingPercent,
+          managerId: emp.managerId,
+          joiningDate: emp.joiningDate,
+          status: emp.status,
+          salary: emp.salary,
+          salaryBand: emp.salaryBand
+        };
+
+        await apiRequest(`/api/v1/employees/${empId}`, {
+          method: 'PUT',
+          body: JSON.stringify(backendEmp)
+        });
+
         addLog(activeUserEmail, 'Onboarding', 'TOGGLE_TASK', `Toggled onboarding task "${t.title}" to ${t.done}`);
       }
     }
   }
 
   // Leave actions
-  function applyLeave(data, activeUserEmail) {
-    const newReq = {
-      id: `lv-${Date.now()}`,
+  async function applyLeave(data, activeUserEmail) {
+    const { useAuthStore } = await import('./authStore');
+    const authStore = useAuthStore();
+
+    const backendReq = {
+      employeeId: authStore.user.id,
+      leaveType: data.leaveType.toUpperCase(),
+      startDate: data.fromDate,
+      endDate: data.toDate,
+      reason: data.reason,
+      status: 'PENDING',
+      attachmentName: data.attachmentName || null,
+      attachmentPath: data.attachmentPath || null
+    };
+
+    const created = await apiRequest('/api/v1/leaves/requests', {
+      method: 'POST',
+      body: JSON.stringify(backendReq)
+    });
+
+    const daysReq = calculateLeaveDaysFrontend(authStore.user.id, created.startDate, created.endDate);
+
+    const mapped = {
+      id: created.id,
       employeeCode: data.employeeCode,
       fullName: data.fullName,
       department: data.department,
-      leaveType: data.leaveType,
-      fromDate: data.fromDate,
-      toDate: data.toDate,
-      daysRequested: parseInt(data.daysRequested),
-      reason: data.reason,
-      status: 'PENDING',
+      leaveType: created.leaveType === 'ANNUAL' ? 'Annual' : created.leaveType === 'SICK' ? 'Sick' : created.leaveType === 'CASUAL' ? 'Casual' : created.leaveType === 'UNPAID' ? 'Unpaid' : created.leaveType,
+      fromDate: created.startDate,
+      toDate: created.endDate,
+      daysRequested: daysReq,
+      reason: created.reason,
+      status: created.status,
       approvedBy: null,
       comments: null,
-      createdAt: new Date().toISOString()
+      attachmentName: created.attachmentName || null,
+      attachmentPath: created.attachmentPath || null,
+      createdAt: created.createdAt
     };
-    
-    leaveRequests.value.unshift(newReq);
-    
+
+    leaveRequests.value.unshift(mapped);
     addLog(activeUserEmail, 'Leave', 'APPLY_LEAVE', `Applied for ${data.leaveType} leave: ${data.fromDate} to ${data.toDate}`);
-    addNotification('Leave Submitted', `Leave request for ${data.daysRequested} days has been submitted.`, 'Leave', '/leave');
-    return newReq;
+    addNotification('Leave Submitted', `Leave request for ${mapped.daysRequested} days has been submitted.`, 'Leave', '/leave');
+    return mapped;
   }
 
-  function cancelLeaveRequest(reqId, activeUserEmail) {
+  async function cancelLeaveRequest(reqId, activeUserEmail) {
+    await apiRequest(`/api/v1/leaves/requests/${reqId}/cancel`, { method: 'POST' });
     const req = leaveRequests.value.find(r => r.id === reqId);
-    if (req && req.status === 'PENDING') {
+    if (req) {
       req.status = 'CANCELLED';
-      addLog(activeUserEmail, 'Leave', 'CANCEL_LEAVE', `Cancelled leave request ID ${reqId}`);
-      return true;
     }
-    return false;
+    addLog(activeUserEmail, 'Leave', 'CANCEL_LEAVE', `Cancelled leave request ID ${reqId}`);
+    return true;
   }
 
-  function approveLeaveRequest(reqId, managerName, comment, activeUserEmail) {
+  async function approveLeaveRequest(reqId, managerName, comment, activeUserEmail) {
+    const url = `/api/v1/leaves/requests/${reqId}/approve` + (comment ? `?comment=${encodeURIComponent(comment)}` : '');
+    const approved = await apiRequest(url, { method: 'POST' });
     const req = leaveRequests.value.find(r => r.id === reqId);
-    if (req && req.status === 'PENDING') {
+    if (req) {
       req.status = 'APPROVED';
       req.approvedBy = managerName;
       req.comments = comment;
@@ -570,46 +676,179 @@ export const useHrStore = defineStore('hr', () => {
           bal.remaining = Math.max(0, bal.remaining - req.daysRequested);
         }
       }
-      
-      addLog(activeUserEmail, 'Leave', 'APPROVE_LEAVE', `Approved leave request ID ${reqId}`);
-      
-      // Create notification for employee
-      addNotification('Leave Approved', `Your leave request from ${req.fromDate} has been APPROVED.`, 'Leave', '/leave');
-      return true;
     }
-    return false;
+    
+    addLog(activeUserEmail, 'Leave', 'APPROVE_LEAVE', `Approved leave request ID ${reqId}`);
+    addNotification('Leave Approved', `Your leave request from ${req ? req.fromDate : ''} has been APPROVED.`, 'Leave', '/leave');
+    return true;
   }
 
-  function rejectLeaveRequest(reqId, managerName, reason, activeUserEmail) {
+  async function rejectLeaveRequest(reqId, managerName, reason, activeUserEmail) {
+    const url = `/api/v1/leaves/requests/${reqId}/reject` + (reason ? `?comment=${encodeURIComponent(reason)}` : '');
+    const rejected = await apiRequest(url, { method: 'POST' });
     const req = leaveRequests.value.find(r => r.id === reqId);
-    if (req && req.status === 'PENDING') {
+    if (req) {
       req.status = 'REJECTED';
       req.approvedBy = managerName;
       req.comments = reason;
-      
-      addLog(activeUserEmail, 'Leave', 'REJECT_LEAVE', `Rejected leave request ID ${reqId}. Reason: ${reason}`);
-      addNotification('Leave Rejected', `Your leave request from ${req.fromDate} has been REJECTED.`, 'Leave', '/leave');
-      return true;
     }
-    return false;
+    
+    addLog(activeUserEmail, 'Leave', 'REJECT_LEAVE', `Rejected leave request ID ${reqId}. Reason: ${reason}`);
+    addNotification('Leave Rejected', `Your leave request from ${req ? req.fromDate : ''} has been REJECTED.`, 'Leave', '/leave');
+    return true;
+  }
+
+  function calculateLeaveDaysFrontend(employeeId, fromDateStr, toDateStr) {
+    const emp = employees.value.find(e => e.id === employeeId);
+    let country = 'India';
+    if (emp && emp.address) {
+      const addrUpper = emp.address.toUpperCase();
+      if (addrUpper.includes("USA") || addrUpper.includes("UNITED STATES")) {
+        country = 'USA';
+      } else if (addrUpper.includes("UK") || addrUpper.includes("UNITED KINGDOM")) {
+        country = 'UK';
+      }
+    }
+    const countryHolidays = publicHolidays.value
+      .filter(h => h.country.toLowerCase() === country.toLowerCase())
+      .map(h => h.date);
+
+    let count = 0;
+    let start = new Date(fromDateStr);
+    let end = new Date(toDateStr);
+    let current = new Date(start);
+    while (current <= end) {
+      const day = current.getDay();
+      const isWeekend = (day === 0 || day === 6);
+      const yyyy = current.getFullYear();
+      const mm = String(current.getMonth() + 1).padStart(2, '0');
+      const dd = String(current.getDate()).padStart(2, '0');
+      const dateStr = `${yyyy}-${mm}-${dd}`;
+      const isHoliday = countryHolidays.includes(dateStr);
+
+      if (!isWeekend && !isHoliday) {
+        count++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    return count;
+  }
+
+  async function fetchPublicHolidays() {
+    try {
+      const data = await apiRequest('/api/v1/leaves/holidays');
+      if (data) {
+        publicHolidays.value = data.map(h => ({
+          id: h.id,
+          country: h.country,
+          name: h.name,
+          date: h.holidayDate,
+          mandatory: true
+        }));
+      }
+    } catch (e) {
+      console.warn('API error fetching public holidays:', e.message);
+    }
+  }
+
+  async function addPublicHoliday(holidayData, activeUserEmail) {
+    try {
+      const backendHoliday = {
+        country: holidayData.country,
+        name: holidayData.name,
+        holidayDate: holidayData.date
+      };
+      const created = await apiRequest('/api/v1/leaves/holidays', {
+        method: 'POST',
+        body: JSON.stringify(backendHoliday)
+      });
+      if (created) {
+        publicHolidays.value.push({
+          id: created.id,
+          country: created.country,
+          name: created.name,
+          date: created.holidayDate,
+          mandatory: true
+        });
+        addLog(activeUserEmail || 'hr@company.com', 'Leave', 'ADD_HOLIDAY', `Added public holiday: ${created.name} (${created.country}) on ${created.holidayDate}`);
+        return created;
+      }
+    } catch (e) {
+      console.error('Error adding public holiday:', e);
+      throw e;
+    }
+  }
+
+  async function uploadLeaveAttachment(file) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const data = await apiRequest('/api/v1/leaves/upload', {
+        method: 'POST',
+        body: formData
+      });
+      return data; // returns { fileName, filePath }
+    } catch (e) {
+      console.error('Error uploading leave attachment:', e);
+      throw e;
+    }
+  }
+
+  async function uploadExpenseReceipt(file) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const data = await apiRequest('/api/v1/expenses/upload', {
+        method: 'POST',
+        body: formData
+      });
+      return data; // returns { fileName, filePath }
+    } catch (e) {
+      console.error('Error uploading expense receipt:', e);
+      throw e;
+    }
   }
 
   // Expense actions
-  function submitExpenseClaim(data, activeUserEmail) {
+  async function submitExpenseClaim(data, activeUserEmail) {
+    const { useAuthStore } = await import('./authStore');
+    const authStore = useAuthStore();
+
+    const claim = {
+      employeeId: authStore.user.id,
+      category: data.category.toUpperCase(),
+      amount: parseFloat(data.amount),
+      currency: data.currency,
+      description: data.description,
+      status: 'PENDING'
+    };
+
+    const receipts = data.receiptName ? [{
+      s3Url: `http://localhost:9000/receipts/${data.receiptName}`,
+      fileName: data.receiptName
+    }] : [];
+
+    const payload = { claim, receipts };
+
+    const created = await apiRequest('/api/v1/expenses', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+
     const newClaim = {
-      id: `exp-${Date.now()}`,
+      id: created.id,
       employeeCode: data.employeeCode,
       fullName: data.fullName,
       department: data.department,
       category: data.category,
-      amount: parseFloat(data.amount),
-      currency: data.currency,
-      date: data.date,
-      description: data.description,
+      amount: created.amount,
+      currency: created.currency,
+      date: created.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
+      description: created.description,
       receiptName: data.receiptName || 'uploaded_receipt.pdf',
-      status: 'PENDING',
+      status: created.status,
       timeline: [
-        { status: 'SUBMITTED', title: `Submitted by ${data.fullName}`, timestamp: new Date().toISOString() }
+        { status: 'SUBMITTED', title: `Submitted by ${data.fullName}`, timestamp: created.createdAt }
       ],
       paymentRef: null
     };
@@ -621,35 +860,37 @@ export const useHrStore = defineStore('hr', () => {
     return newClaim;
   }
 
-  function cancelExpenseClaim(claimId, activeUserEmail) {
+  async function cancelExpenseClaim(claimId, activeUserEmail) {
     const c = expenseClaims.value.find(cl => cl.id === claimId);
-    if (c && c.status === 'PENDING') {
-      expenseClaims.value = expenseClaims.value.filter(cl => cl.id !== claimId);
+    if (c && ['PENDING', 'PENDING_FINANCE'].includes(c.status)) {
+      await apiRequest(`/api/v1/expenses/${claimId}/cancel`, { method: 'POST' });
+      c.status = 'CANCELLED';
       addLog(activeUserEmail, 'Expense', 'CANCEL_CLAIM', `Cancelled pending claim ID ${claimId}`);
       return true;
     }
     return false;
   }
 
-  function approveExpenseManager(claimId, managerName, activeUserEmail) {
+  async function approveExpenseManager(claimId, managerName, activeUserEmail) {
+    const approved = await apiRequest(`/api/v1/expenses/${claimId}/approve-manager`, { method: 'POST' });
     const c = expenseClaims.value.find(cl => cl.id === claimId);
-    if (c && c.status === 'PENDING') {
+    if (c) {
       c.status = 'APPROVED_MANAGER';
       c.timeline.push({
         status: 'APPROVED_MANAGER',
         title: `Approved by ${managerName} (Manager)`,
         timestamp: new Date().toISOString()
       });
-      addLog(activeUserEmail, 'Expense', 'APPROVE_EXPENSE_MANAGER', `Manager approved expense ID ${claimId}`);
-      addNotification('Expense Manager Approved', `Your expense claim ID ${claimId} was approved by manager.`, 'Expense', '/expense');
-      return true;
     }
-    return false;
+    addLog(activeUserEmail, 'Expense', 'APPROVE_EXPENSE_MANAGER', `Manager approved expense ID ${claimId}`);
+    addNotification('Expense Manager Approved', `Your expense claim ID ${claimId} was approved by manager.`, 'Expense', '/expense');
+    return true;
   }
 
-  function approveExpenseFinance(claimId, financeName, payRef, activeUserEmail) {
+  async function approveExpenseFinance(claimId, financeName, payRef, activeUserEmail) {
+    const approved = await apiRequest(`/api/v1/expenses/${claimId}/approve-finance`, { method: 'POST' });
     const c = expenseClaims.value.find(cl => cl.id === claimId);
-    if (c && c.status === 'APPROVED_MANAGER') {
+    if (c) {
       c.status = 'APPROVED_FINANCE';
       c.paymentRef = payRef;
       c.timeline.push({
@@ -657,182 +898,251 @@ export const useHrStore = defineStore('hr', () => {
         title: `Approved by ${financeName} (Finance Admin)`,
         timestamp: new Date().toISOString()
       });
-      addLog(activeUserEmail, 'Expense', 'APPROVE_EXPENSE_FINANCE', `Finance approved expense ID ${claimId}. Pay Ref: ${payRef}`);
-      return true;
     }
-    return false;
+    addLog(activeUserEmail, 'Expense', 'APPROVE_EXPENSE_FINANCE', `Finance approved expense ID ${claimId}. Pay Ref: ${payRef}`);
+    return true;
   }
 
-  function rejectExpense(claimId, reviewerName, reason, activeUserEmail) {
+  async function rejectExpense(claimId, reviewerName, reason, activeUserEmail) {
+    const { useAuthStore } = await import('./authStore');
+    const authStore = useAuthStore();
+
+    const isFinance = authStore.activeRole === 'FINANCE_ADMIN';
+    const endpoint = isFinance 
+      ? `/api/v1/expenses/${claimId}/reject-finance` 
+      : `/api/v1/expenses/${claimId}/reject-manager`;
+
+    const rejected = await apiRequest(endpoint, { method: 'POST' });
     const c = expenseClaims.value.find(cl => cl.id === claimId);
-    if (c && (c.status === 'PENDING' || c.status === 'APPROVED_MANAGER')) {
+    if (c) {
       c.status = 'REJECTED';
       c.timeline.push({
         status: 'REJECTED',
         title: `Rejected by ${reviewerName}. Reason: ${reason}`,
         timestamp: new Date().toISOString()
       });
-      addLog(activeUserEmail, 'Expense', 'REJECT_EXPENSE', `Rejected claim ID ${claimId}. Reason: ${reason}`);
-      addNotification('Expense Rejected', `Your expense claim ID ${claimId} was rejected.`, 'Expense', '/expense');
-      return true;
     }
-    return false;
+    addLog(activeUserEmail, 'Expense', 'REJECT_EXPENSE', `Rejected claim ID ${claimId}. Reason: ${reason}`);
+    addNotification('Expense Rejected', `Your expense claim ID ${claimId} was rejected.`, 'Expense', '/expense');
+    return true;
   }
 
-  function markExpensePaid(claimId, activeUserEmail) {
+  async function markExpensePaid(claimId, activeUserEmail) {
+    await apiRequest(`/api/v1/expenses/${claimId}/pay`, { method: 'POST' });
     const c = expenseClaims.value.find(cl => cl.id === claimId);
-    if (c && c.status === 'APPROVED_FINANCE') {
+    if (c) {
       c.status = 'PAID';
       c.timeline.push({
         status: 'PAID',
         title: `Marked Paid`,
         timestamp: new Date().toISOString()
       });
-      addLog(activeUserEmail, 'Expense', 'PAY_EXPENSE', `Marked claim ID ${claimId} as Paid`);
-      addNotification('Expense Paid', `Your expense claim ID ${claimId} has been Paid.`, 'Expense', '/expense');
-      return true;
     }
-    return false;
+    addLog(activeUserEmail, 'Expense', 'PAY_EXPENSE', `Marked claim ID ${claimId} as Paid`);
+    addNotification('Expense Paid', `Your expense claim ID ${claimId} has been Paid.`, 'Expense', '/expense');
+    return true;
   }
 
   // Payroll / Payslip Actions
-  function processPayrollUpload(csvContent, month, activeUserEmail) {
-    // Basic CSV mock parser
-    // Check headers
-    const lines = csvContent.split('\n').map(l => l.trim()).filter(Boolean);
-    if (lines.length < 2) return { success: false, errors: ['CSV contains no data rows'] };
-    
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
-    const reqHeaders = ['employee_id', 'basic', 'allowances', 'deductions'];
-    const missing = reqHeaders.filter(h => !headers.includes(h));
-    
-    if (missing.length > 0) {
-      return { success: false, errors: [`Missing required columns: ${missing.join(', ')}`] };
-    }
-    
-    const empIdIdx = headers.indexOf('employee_id');
-    const basicIdx = headers.indexOf('basic');
-    const allowancesIdx = headers.indexOf('allowances');
-    const deductionsIdx = headers.indexOf('deductions');
-    
-    const errors = [];
-    const validRows = [];
-    
-    for (let i = 1; i < lines.length; i++) {
-      const parts = lines[i].split(',').map(p => p.trim());
-      if (parts.length < headers.length) {
-        errors.push(`Row ${i + 1}: Incomplete data`);
-        continue;
-      }
-      
-      const empCode = parts[empIdIdx];
-      const basic = parseFloat(parts[basicIdx]);
-      const allowances = parseFloat(parts[allowancesIdx]);
-      const deductions = parseFloat(parts[deductionsIdx]);
-      
-      const emp = employees.value.find(e => e.employeeCode === empCode);
-      if (!emp) {
-        errors.push(`Row ${i + 1}: Employee code "${empCode}" not found in system`);
-        continue;
-      }
-      
-      if (isNaN(basic) || basic <= 0) errors.push(`Row ${i + 1}: Invalid basic salary`);
-      if (isNaN(allowances) || allowances < 0) errors.push(`Row ${i + 1}: Invalid allowances`);
-      if (isNaN(deductions) || deductions < 0) errors.push(`Row ${i + 1}: Invalid deductions`);
-      
-      if (errors.length === 0) {
-        validRows.push({ empCode, basic, allowances, deductions });
-      }
-    }
-    
-    if (errors.length > 0) {
-      return { success: false, errors };
-    }
-    
-    // Write draft payslips
-    const batchId = `b-${Date.now()}`;
-    const newBatch = {
-      id: batchId,
-      month,
-      uploadDate: new Date().toISOString().split('T')[0],
-      totalEmployees: validRows.length,
-      status: 'DRAFT',
-      csvName: `payroll_uploaded_${month}.csv`
-    };
-    
-    payrollBatches.value.unshift(newBatch);
-    
-    validRows.forEach(row => {
-      const grossPay = row.basic + row.allowances;
-      const netSalary = grossPay - row.deductions;
-      
-      payslips.value.push({
-        id: `ps-${Date.now()}-${row.empCode}`,
-        employeeCode: row.empCode,
-        month,
-        grossPay,
-        allowances: row.allowances,
-        deductions: row.deductions,
-        netSalary,
-        basic: row.basic,
-        pf: Math.round(row.basic * 0.12),
-        tax: Math.round(row.basic * 0.05),
-        status: 'DRAFT',
-        publishedAt: null
+  async function generatePayrollRun(month, activeUserEmail) {
+    try {
+      const [yearStr, monthNum] = month.split('-');
+      const year = parseInt(yearStr);
+      const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+      const monthName = months[parseInt(monthNum) - 1] || month;
+
+      const generated = await apiRequest(`/api/v1/payroll/generate?month=${monthName}&year=${year}`, {
+        method: 'POST'
       });
-    });
-    
-    addLog(activeUserEmail, 'Payroll', 'UPLOAD_PAYROLL', `Uploaded payroll CSV for month ${month}`);
-    return { success: true, batch: newBatch };
+
+      const newPayslips = generated.map(p => {
+        const emp = employees.value.find(e => e.id === p.employeeId);
+        const basic = Math.round((p.grossPay - p.deduction) * 0.6);
+        const allowances = p.grossPay - basic;
+        const pf = Math.round(p.deduction * 0.5);
+        const tax = p.deduction - pf;
+        return {
+          id: p.id,
+          employeeCode: emp ? emp.employeeCode : 'EMP001',
+          month: convertMonthToYyyyMm(p.month, p.year),
+          grossPay: p.grossPay,
+          allowances: allowances,
+          deductions: p.deduction,
+          netSalary: p.netPay,
+          basic: basic,
+          pf: pf,
+          tax: tax,
+          status: p.published ? 'PUBLISHED' : 'DRAFT',
+          publishedAt: p.published ? p.createdAt : null
+        };
+      });
+
+      // Filter out existing drafts
+      payslips.value = payslips.value.filter(ps => !(ps.month === month && ps.status === 'DRAFT'));
+      payslips.value.push(...newPayslips);
+
+      // Create a batch in local state
+      const batchId = `b-${Date.now()}`;
+      const newBatch = {
+        id: batchId,
+        month,
+        uploadDate: new Date().toISOString().split('T')[0],
+        totalEmployees: generated.length,
+        status: 'DRAFT',
+        csvName: `Auto-Run Generated (${month})`
+      };
+
+      payrollBatches.value = payrollBatches.value.filter(b => !(b.month === month && b.status === 'DRAFT'));
+      payrollBatches.value.unshift(newBatch);
+
+      addLog(activeUserEmail, 'Payroll', 'GENERATE_PAYROLL', `Automatically generated payroll run for month ${month}`);
+      return { success: true, batch: newBatch };
+    } catch (e) {
+      console.error(e);
+      return { success: false, errors: [e.message] };
+    }
   }
 
-  function publishPayrollBatch(batchId, month, activeUserEmail) {
+  async function processPayrollUpload(csvContent, month, activeUserEmail) {
+    try {
+      const imported = await apiRequest('/api/v1/payroll/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: csvContent
+      });
+
+      const newPayslips = imported.map(p => {
+        const emp = employees.value.find(e => e.id === p.employeeId);
+        const basic = Math.round((p.grossPay - p.deduction) * 0.6);
+        const allowances = p.grossPay - basic;
+        const pf = Math.round(p.deduction * 0.5);
+        const tax = p.deduction - pf;
+        return {
+          id: p.id,
+          employeeCode: emp ? emp.employeeCode : 'EMP001',
+          month: convertMonthToYyyyMm(p.month, p.year),
+          grossPay: p.grossPay,
+          allowances: allowances,
+          deductions: p.deduction,
+          netSalary: p.netPay,
+          basic: basic,
+          pf: pf,
+          tax: tax,
+          status: 'DRAFT',
+          publishedAt: null
+        };
+      });
+
+      payslips.value.push(...newPayslips);
+
+      const batchId = `b-${Date.now()}`;
+      const newBatch = {
+        id: batchId,
+        month,
+        uploadDate: new Date().toISOString().split('T')[0],
+        totalEmployees: imported.length,
+        status: 'DRAFT',
+        csvName: `payroll_uploaded_${month}.csv`
+      };
+      
+      payrollBatches.value.unshift(newBatch);
+      addLog(activeUserEmail, 'Payroll', 'UPLOAD_PAYROLL', `Uploaded payroll CSV for month ${month}`);
+      return { success: true, batch: newBatch };
+    } catch (e) {
+      console.error(e);
+      return { success: false, errors: [e.message] };
+    }
+  }
+
+  async function publishPayrollBatch(batchId, month, activeUserEmail) {
     const batch = payrollBatches.value.find(b => b.id === batchId);
     if (batch && batch.status === 'DRAFT') {
-      batch.status = 'PUBLISHED';
-      
-      // Update matching payslips status
-      payslips.value.forEach(ps => {
-        if (ps.month === month && ps.status === 'DRAFT') {
-          ps.status = 'PUBLISHED';
-          ps.publishedAt = new Date().toISOString();
-          
-          // Send notification to employee
-          const emp = employees.value.find(e => e.employeeCode === ps.employeeCode);
-          if (emp) {
-            addNotification('Payslip Published', `Your payslip for ${month} has been published.`, 'Payslip', '/payslip');
+      try {
+        const [yearStr, monthNum] = month.split('-');
+        const year = parseInt(yearStr);
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthName = months[parseInt(monthNum) - 1] || month;
+
+        await apiRequest(`/api/v1/payroll/publish?month=${monthName}&year=${year}`, { method: 'POST' });
+
+        batch.status = 'PUBLISHED';
+        
+        // Update matching payslips status
+        payslips.value.forEach(ps => {
+          if (ps.month === month && ps.status === 'DRAFT') {
+            ps.status = 'PUBLISHED';
+            ps.publishedAt = new Date().toISOString();
+            
+            // Send notification to employee
+            const emp = employees.value.find(e => e.employeeCode === ps.employeeCode);
+            if (emp) {
+              addNotification('Payslip Published', `Your payslip for ${month} has been published.`, 'Payslip', '/payslip');
+            }
           }
-        }
-      });
-      
-      addLog(activeUserEmail, 'Payroll', 'PUBLISH_BATCH', `Published payroll batch ID ${batchId} for ${month}`);
-      return true;
+        });
+        
+        addLog(activeUserEmail, 'Payroll', 'PUBLISH_BATCH', `Published payroll batch ID ${batchId} for ${month}`);
+        return true;
+      } catch (e) {
+        console.error('Publish failed:', e.message);
+        return false;
+      }
     }
     return false;
   }
 
   // HR employee management
-  function addNewEmployee(data, activeUserEmail) {
-    const newEmp = {
-      id: `emp-${Date.now()}`,
+  async function addNewEmployee(data, activeUserEmail) {
+    const backendEmp = {
       employeeCode: data.employeeCode,
-      fullName: data.fullName,
+      name: data.fullName,
       email: data.email,
       phone: data.phone || '',
       address: data.address || '',
       department: data.department,
       designation: data.designation,
-      managerId: data.managerId,
-      managerName: data.managerName || 'Sarah Jenkins',
-      managerContact: 'sarah.j@company.com',
+      managerId: data.managerId || null,
       joiningDate: data.joiningDate,
-      employmentType: data.employmentType || 'Full-time',
-      role: data.role || 'EMPLOYEE',
       salary: parseFloat(data.salary) || 800000,
       salaryBand: data.salaryBand || 'Band 1 (L1-L2)',
       status: 'ACTIVE',
+      role: data.role,
+      onboardingPercent: 0
+    };
+
+    const created = await apiRequest('/api/v1/employees', {
+      method: 'POST',
+      body: JSON.stringify(backendEmp)
+    });
+
+    const welcomeLink = `http://localhost:5173/login?email=${encodeURIComponent(created.email)}&action=create-password`;
+
+    const newEmp = {
+      id: created.id,
+      employeeCode: created.employeeCode,
+      fullName: created.name,
+      email: created.email,
+      phone: created.phone || '',
+      address: created.address || '',
+      department: created.department,
+      designation: created.designation,
+      managerId: created.managerId,
+      managerName: created.managerId ? (employees.value.find(e => e.id === created.managerId)?.fullName || 'Sarah Jenkins') : null,
+      managerContact: 'sarah.j@company.com',
+      joiningDate: created.joiningDate,
+      employmentType: 'Full-time',
+      role: data.role || 'EMPLOYEE',
+      salary: created.salary,
+      salaryBand: created.salaryBand,
+      status: created.status,
       photo: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150',
-      onboardingPercent: 0,
+      onboardingPercent: created.onboardingPercent,
+      onboardingStatus: created.onboardingStatus || 'PENDING_DETAILS',
+      school: '',
+      college: '',
+      experience: '',
+      certificates: '',
+      welcomeLink: welcomeLink,
       onboardingTasks: [
         { id: 1, title: 'Acknowledge company policy documents', done: false },
         { id: 2, title: 'Upload identity proof (Aadhaar / Passport)', done: false },
@@ -855,13 +1165,68 @@ export const useHrStore = defineStore('hr', () => {
     ];
 
     addLog(activeUserEmail, 'Employee', 'CREATE_EMPLOYEE', `Created new employee profile: ${data.fullName} (${data.employeeCode})`);
-    
-    // Simulate sending welcome email
-    addNotification('Welcome Email Sent', `Onboarding checklist triggered and welcome email dispatched to ${data.email} via SES.`, 'System');
+    addNotification('Welcome Email Sent', `Welcome link: ${welcomeLink}`, 'System');
+
+    // EmailJS Send Integration
+    const sId = systemSettings.value.emailJsServiceId;
+    const tId = systemSettings.value.emailJsTemplateId;
+    const pKey = systemSettings.value.emailJsPublicKey;
+    const prKey = systemSettings.value.emailJsPrivateKey;
+
+    if (sId && tId && pKey) {
+      const emailPayload = {
+        service_id: sId,
+        template_id: tId,
+        user_id: pKey,
+        template_params: {
+          to_email: created.email,
+          email: created.email,
+          to: created.email,
+          recipient: created.email,
+          recipient_email: created.email,
+          employee_name: created.name,
+          welcome_link: welcomeLink
+        }
+      };
+
+      if (prKey) {
+        emailPayload.accessToken = prKey;
+      }
+
+      fetch('https://api.emailjs.com/api/v1.0/email/send', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(emailPayload)
+      })
+      .then(res => {
+        if (res.ok) {
+          console.log('Onboarding invitation email sent successfully via EmailJS');
+          addLog(activeUserEmail, 'Employee', 'EMAIL_SENT', `Onboarding invitation sent to ${created.email} via EmailJS`);
+        } else {
+          res.text().then(text => {
+            console.error('EmailJS error response:', text);
+            addLog(activeUserEmail, 'Employee', 'EMAIL_SEND_FAILED', `Failed to send onboarding email to ${created.email}: ${text}`);
+            if (window.showPortalToast) {
+              window.showPortalToast(`EmailJS Error: ${text}. Check Email Settings in Admin Console.`, 'error');
+            }
+          });
+        }
+      })
+      .catch(err => {
+        console.error('EmailJS request failed:', err);
+        addLog(activeUserEmail, 'Employee', 'EMAIL_SEND_FAILED', `Failed to send onboarding email to ${created.email}: ${err.message || err}`);
+        if (window.showPortalToast) {
+          window.showPortalToast(`EmailJS Request Failed: ${err.message || err}`, 'error');
+        }
+      });
+    }
+
     return newEmp;
   }
 
-  function updateEmployeeHrView(empId, data, activeUserEmail) {
+  async function updateEmployeeHrView(empId, data, activeUserEmail) {
     const emp = employees.value.find(e => e.id === empId);
     if (emp) {
       emp.department = data.department;
@@ -869,11 +1234,39 @@ export const useHrStore = defineStore('hr', () => {
       emp.managerId = data.managerId;
       const mgr = employees.value.find(e => e.id === data.managerId);
       emp.managerName = mgr ? mgr.fullName : 'None';
-      emp.employmentType = data.employmentType;
+      emp.employmentType = data.employmentType || emp.employmentType;
       emp.status = data.status;
       if (data.salary) {
         emp.salary = parseFloat(data.salary);
       }
+      
+      const backendEmp = {
+        id: emp.id,
+        employeeCode: emp.employeeCode,
+        name: emp.fullName,
+        email: emp.email,
+        phone: emp.phone,
+        address: emp.address,
+        department: emp.department,
+        designation: emp.designation,
+        bankAccountNo: emp.bankDetails.accountNo,
+        bankIfsc: emp.bankDetails.ifsc,
+        bankName: emp.bankDetails.bankName,
+        emergencyName: emp.emergencyContact.name,
+        emergencyRelation: emp.emergencyContact.relation,
+        emergencyPhone: emp.emergencyContact.phone,
+        onboardingPercent: emp.onboardingPercent,
+        managerId: emp.managerId,
+        joiningDate: emp.joiningDate,
+        status: emp.status,
+        salary: emp.salary,
+        salaryBand: emp.salaryBand
+      };
+
+      await apiRequest(`/api/v1/employees/${empId}`, {
+        method: 'PUT',
+        body: JSON.stringify(backendEmp)
+      });
       
       addLog(activeUserEmail, 'Employee', 'UPDATE_HR_DETAILS', `HR updated employment details for employee ${emp.fullName}`);
       return true;
@@ -924,41 +1317,141 @@ export const useHrStore = defineStore('hr', () => {
   }
 
   const backendConnected = ref(false);
+  const mandatoryDocuments = ref([]);
+
+  async function fetchMandatoryDocuments() {
+    try {
+      const data = await apiRequest('/api/v1/documents/mandatory');
+      if (data) {
+        mandatoryDocuments.value = data;
+      }
+    } catch (e) {
+      console.error('Error fetching mandatory documents:', e);
+    }
+  }
+
+  async function addMandatoryDocument(name, activeUserEmail) {
+    try {
+      const data = await apiRequest('/api/v1/documents/mandatory', {
+        method: 'POST',
+        body: JSON.stringify({ name })
+      });
+      if (data) {
+        mandatoryDocuments.value.push(data);
+        addLog(activeUserEmail, 'Documents', 'ADD_MANDATORY_DOC', `Added required document type: ${name}`);
+        addNotification('New Mandatory Document', `A new mandatory document '${name}' has been required by HR.`, 'System');
+        return true;
+      }
+    } catch (e) {
+      console.error('Error adding mandatory document:', e);
+    }
+    return false;
+  }
+
+  async function fetchEmployeeDocuments(employeeId) {
+    try {
+      const data = await apiRequest(`/api/v1/employees/${employeeId}/documents`);
+      const emp = employees.value.find(e => e.id === employeeId);
+      if (emp && data) {
+        emp.documents = data.map(d => ({
+          id: d.id,
+          name: d.fileName,
+          size: d.fileSize,
+          date: d.uploadedAt?.split('T')[0] || new Date().toISOString().split('T')[0],
+          type: d.documentType
+        }));
+      }
+      return data;
+    } catch (e) {
+      console.error('Error fetching employee documents:', e);
+      return [];
+    }
+  }
+
+  async function uploadDocument(employeeId, file, documentType, activeUserEmail) {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('documentType', documentType);
+
+      const data = await apiRequest(`/api/v1/employees/${employeeId}/documents`, {
+        method: 'POST',
+        body: formData
+      });
+
+      if (data) {
+        await fetchEmployeeDocuments(employeeId);
+        addLog(activeUserEmail, 'Documents', 'UPLOAD_DOCUMENT', `Uploaded document type: ${documentType}`);
+        return true;
+      }
+    } catch (e) {
+      console.error('Error uploading document:', e);
+    }
+    return false;
+  }
+
+  async function deleteDocument(employeeId, documentId, activeUserEmail) {
+    try {
+      await apiRequest(`/api/v1/employees/${employeeId}/documents/${documentId}`, {
+        method: 'DELETE'
+      });
+      await fetchEmployeeDocuments(employeeId);
+      addLog(activeUserEmail, 'Documents', 'DELETE_DOCUMENT', `Deleted document ID: ${documentId}`);
+      return true;
+    } catch (e) {
+      console.error('Error deleting document:', e);
+    }
+    return false;
+  }
 
   async function fetchEmployees() {
     try {
       const data = await apiRequest('/api/v1/employees');
       if (data && data.length > 0) {
-        employees.value = data.map(emp => ({
-          id: emp.id,
-          employeeCode: emp.employeeCode,
-          fullName: emp.name,
-          email: emp.email,
-          phone: emp.phone,
-          address: emp.address,
-          department: emp.department,
-          designation: emp.designation,
-          managerId: emp.managerId,
-          managerName: emp.managerId ? 'Sarah Jenkins' : null,
-          joiningDate: emp.joiningDate,
-          employmentType: 'Full-time',
-          role: emp.employeeCode === 'EMP001' ? 'HR_ADMIN' : emp.employeeCode === 'EMP002' ? 'MANAGER' : emp.employeeCode === 'EMP003' ? 'FINANCE_ADMIN' : emp.employeeCode === 'EMP005' ? 'SYSTEM_ADMIN' : 'EMPLOYEE',
-          salary: emp.salary,
-          salaryBand: emp.salaryBand,
-          status: emp.status,
-          onboardingPercent: emp.onboardingPercent,
-          bankDetails: {
-            accountNo: emp.bankAccountNo,
-            ifsc: emp.bankIfsc,
-            bankName: emp.bankName
-          },
-          emergencyContact: {
-            name: emp.emergencyName,
-            relation: emp.emergencyRelation,
-            phone: emp.emergencyPhone
-          },
-          documents: []
-        }));
+        employees.value = data.map(emp => {
+          const docs = emp.certificates ? emp.certificates.split(',').map(name => ({
+            name: name,
+            size: '1.2 MB',
+            date: new Date().toISOString().split('T')[0],
+            type: 'Education'
+          })) : [];
+
+          return {
+            id: emp.id,
+            employeeCode: emp.employeeCode,
+            fullName: emp.name,
+            email: emp.email,
+            phone: emp.phone,
+            address: emp.address,
+            department: emp.department,
+            designation: emp.designation,
+            managerId: emp.managerId,
+            managerName: emp.managerId ? 'Sarah Jenkins' : null,
+            joiningDate: emp.joiningDate,
+            employmentType: 'Full-time',
+            role: emp.employeeCode === 'EMP001' ? 'HR_ADMIN' : emp.employeeCode === 'EMP002' ? 'MANAGER' : emp.employeeCode === 'EMP003' ? 'FINANCE_ADMIN' : emp.employeeCode === 'EMP005' ? 'SYSTEM_ADMIN' : 'EMPLOYEE',
+            salary: emp.salary,
+            salaryBand: emp.salaryBand,
+            status: emp.status,
+            onboardingPercent: emp.onboardingPercent,
+            onboardingStatus: emp.onboardingStatus || 'APPROVED',
+            school: emp.school || '',
+            college: emp.college || '',
+            experience: emp.experience || '',
+            certificates: emp.certificates || '',
+            bankDetails: {
+              accountNo: emp.bankAccountNo,
+              ifsc: emp.bankIfsc,
+              bankName: emp.bankName
+            },
+            emergencyContact: {
+              name: emp.emergencyName,
+              relation: emp.emergencyRelation,
+              phone: emp.emergencyPhone
+            },
+            documents: docs
+          };
+        });
         backendConnected.value = true;
       }
     } catch (e) {
@@ -980,23 +1473,43 @@ export const useHrStore = defineStore('hr', () => {
         }));
       }
       
-      const requests = await apiRequest(`/api/v1/leaves/requests?employeeId=${employeeId}`);
+      const { useAuthStore } = await import('./authStore');
+      const authStore = useAuthStore();
+      const role = authStore.activeRole;
+      
+      let requests = [];
+      if (role === 'HR_ADMIN' || role === 'SYSTEM_ADMIN') {
+        requests = await apiRequest('/api/v1/leaves/requests');
+      } else if (role === 'MANAGER') {
+        const own = await apiRequest(`/api/v1/leaves/requests?employeeId=${employeeId}`) || [];
+        const reports = await apiRequest(`/api/v1/leaves/requests/manager?managerId=${employeeId}`) || [];
+        requests = [...own, ...reports];
+      } else {
+        requests = await apiRequest(`/api/v1/leaves/requests?employeeId=${employeeId}`) || [];
+      }
+      
       if (requests) {
-        leaveRequests.value = requests.map(req => ({
-          id: req.id,
-          employeeCode: emp?.employeeCode || 'EMP',
-          fullName: emp?.fullName || 'User',
-          department: emp?.department || 'Department',
-          leaveType: req.leaveType === 'ANNUAL' ? 'Annual' : req.leaveType === 'SICK' ? 'Sick' : req.leaveType === 'CASUAL' ? 'Casual' : req.leaveType,
-          fromDate: req.startDate,
-          toDate: req.endDate,
-          daysRequested: Math.round((new Date(req.endDate) - new Date(req.startDate)) / (1000 * 60 * 60 * 24)) + 1,
-          reason: req.reason,
-          status: req.status,
-          approvedBy: req.managerComment ? 'Manager' : null,
-          comments: req.managerComment,
-          createdAt: req.createdAt
-        }));
+        leaveRequests.value = requests.map(req => {
+          const reqEmp = employees.value.find(e => e.id === req.employeeId);
+          const daysReq = calculateLeaveDaysFrontend(req.employeeId, req.startDate, req.endDate);
+          return {
+            id: req.id,
+            employeeCode: reqEmp?.employeeCode || 'EMP',
+            fullName: reqEmp?.fullName || 'User',
+            department: reqEmp?.department || 'Department',
+            leaveType: req.leaveType === 'ANNUAL' ? 'Annual' : req.leaveType === 'SICK' ? 'Sick' : req.leaveType === 'CASUAL' ? 'Casual' : req.leaveType === 'UNPAID' ? 'Unpaid' : req.leaveType,
+            fromDate: req.startDate,
+            toDate: req.endDate,
+            daysRequested: daysReq,
+            reason: req.reason,
+            status: req.status,
+            approvedBy: req.managerComment ? 'Manager' : null,
+            comments: req.managerComment,
+            attachmentName: req.attachmentName || null,
+            attachmentPath: req.attachmentPath || null,
+            createdAt: req.createdAt
+          };
+        });
       }
     } catch (e) {
       console.warn('API error fetching leaves:', e.message);
@@ -1005,26 +1518,71 @@ export const useHrStore = defineStore('hr', () => {
 
   async function fetchExpenses(employeeId) {
     try {
-      const claims = await apiRequest(`/api/v1/expenses?employeeId=${employeeId}`);
-      const emp = employees.value.find(e => e.id === employeeId);
+      const { useAuthStore } = await import('./authStore');
+      const authStore = useAuthStore();
+      const role = authStore.activeRole;
+      
+      let claims = [];
+      if (role === 'HR_ADMIN' || role === 'SYSTEM_ADMIN' || role === 'FINANCE_ADMIN') {
+        claims = await apiRequest('/api/v1/expenses') || [];
+      } else if (role === 'MANAGER') {
+        const own = await apiRequest(`/api/v1/expenses?employeeId=${employeeId}`) || [];
+        const reports = await apiRequest(`/api/v1/expenses/manager?managerId=${employeeId}`) || [];
+        claims = [...own, ...reports];
+      } else {
+        claims = await apiRequest(`/api/v1/expenses?employeeId=${employeeId}`) || [];
+      }
+
       if (claims) {
-        expenseClaims.value = claims.map(c => ({
-          id: c.id,
-          employeeCode: emp?.employeeCode || 'EMP',
-          fullName: emp?.fullName || 'User',
-          department: emp?.department || 'Department',
-          category: c.category,
-          amount: c.amount,
-          currency: c.currency,
-          date: c.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
-          description: c.description,
-          receiptName: 'receipt.pdf',
-          status: c.status,
-          timeline: [
-            { status: 'SUBMITTED', title: 'Submitted', timestamp: c.createdAt }
-          ],
-          paymentRef: null
+        const mappedClaims = await Promise.all(claims.map(async (c) => {
+          const reqEmp = employees.value.find(e => e.id === c.employeeId);
+          const mappedStatus = c.status === 'APPROVED_BY_MANAGER' ? 'APPROVED_MANAGER'
+                             : c.status === 'APPROVED' ? 'APPROVED_FINANCE'
+                             : c.status === 'REJECTED_BY_FINANCE' ? 'REJECTED'
+                             : c.status;
+          
+          const timeline = [{ status: 'SUBMITTED', title: `Submitted by ${reqEmp?.fullName || 'Employee'}`, timestamp: c.createdAt }];
+          if (mappedStatus === 'APPROVED_MANAGER' || mappedStatus === 'APPROVED_FINANCE' || mappedStatus === 'PAID') {
+            timeline.push({ status: 'APPROVED_MANAGER', title: 'Approved by Manager', timestamp: c.createdAt });
+          }
+          if (mappedStatus === 'APPROVED_FINANCE' || mappedStatus === 'PAID') {
+            timeline.push({ status: 'APPROVED_FINANCE', title: 'Approved by Finance', timestamp: c.createdAt });
+          }
+          if (mappedStatus === 'PAID') {
+            timeline.push({ status: 'PAID', title: 'Marked Paid', timestamp: c.createdAt });
+          }
+          if (mappedStatus === 'REJECTED') {
+            timeline.push({ status: 'REJECTED', title: 'Rejected', timestamp: c.createdAt });
+          }
+          
+          let rName = 'receipt.pdf';
+          try {
+            const receipts = await apiRequest(`/api/v1/expenses/${c.id}/receipts`) || [];
+            if (receipts.length > 0) {
+              rName = receipts[0].fileName;
+            }
+          } catch (err) {
+            console.warn(`Failed to fetch receipts for claim ${c.id}:`, err.message);
+          }
+
+          return {
+            id: c.id,
+            employeeId: c.employeeId,
+            employeeCode: reqEmp?.employeeCode || 'EMP',
+            fullName: reqEmp?.fullName || 'User',
+            department: reqEmp?.department || 'Department',
+            category: c.category.charAt(0).toUpperCase() + c.category.slice(1).toLowerCase(),
+            amount: c.amount,
+            currency: c.currency,
+            date: c.createdAt?.split('T')[0] || new Date().toISOString().split('T')[0],
+            description: c.description,
+            receiptName: rName,
+            status: mappedStatus,
+            timeline,
+            paymentRef: mappedStatus === 'PAID' ? 'TXN-9847582049' : null
+          };
         }));
+        expenseClaims.value = mappedClaims;
       }
     } catch (e) {
       console.warn('API error fetching expenses:', e.message);
@@ -1033,23 +1591,39 @@ export const useHrStore = defineStore('hr', () => {
 
   async function fetchPayslips(employeeId) {
     try {
-      const list = await apiRequest(`/api/v1/payroll/employee/${employeeId}`);
-      const emp = employees.value.find(e => e.id === employeeId);
+      const { useAuthStore } = await import('./authStore');
+      const authStore = useAuthStore();
+      const role = authStore.activeRole;
+      
+      let list = [];
+      if (role === 'HR_ADMIN' || role === 'FINANCE_ADMIN' || role === 'SYSTEM_ADMIN') {
+        list = await apiRequest('/api/v1/payroll/all') || [];
+      } else {
+        list = await apiRequest(`/api/v1/payroll/employee/${employeeId}`) || [];
+      }
+      
       if (list) {
-        payslips.value = list.map(p => ({
-          id: p.id,
-          employeeCode: emp?.employeeCode || 'EMP',
-          month: p.month + '-' + p.year,
-          grossPay: p.grossPay,
-          allowances: 0,
-          deductions: p.deduction,
-          netSalary: p.netPay,
-          basic: p.grossPay,
-          pf: 0,
-          tax: 0,
-          status: p.published ? 'PUBLISHED' : 'DRAFT',
-          publishedAt: p.createdAt
-        }));
+        payslips.value = list.map(p => {
+          const emp = employees.value.find(e => e.id === p.employeeId);
+          const basic = Math.round((p.grossPay - p.deduction) * 0.6);
+          const allowances = p.grossPay - basic;
+          const pf = Math.round(p.deduction * 0.5);
+          const tax = p.deduction - pf;
+          return {
+            id: p.id,
+            employeeCode: emp ? emp.employeeCode : 'EMP',
+            month: convertMonthToYyyyMm(p.month, p.year),
+            grossPay: p.grossPay,
+            allowances: allowances,
+            deductions: p.deduction,
+            netSalary: p.netPay,
+            basic: basic,
+            pf: pf,
+            tax: tax,
+            status: p.published ? 'PUBLISHED' : 'DRAFT',
+            publishedAt: p.createdAt
+          };
+        });
       }
     } catch (e) {
       console.warn('API error fetching payslips:', e.message);
@@ -1078,10 +1652,30 @@ export const useHrStore = defineStore('hr', () => {
   async function syncAll(userId, employeeId) {
     if (!userId || !employeeId) return;
     await fetchEmployees();
+    await fetchPublicHolidays();
     await fetchLeaves(employeeId);
     await fetchExpenses(employeeId);
     await fetchPayslips(employeeId);
     await fetchNotifications(userId);
+    await fetchMandatoryDocuments();
+    await fetchEmployeeDocuments(employeeId);
+  }
+
+  async function approveOnboarding(empId) {
+    try {
+      await apiRequest(`/api/v1/employees/${empId}/approve-onboarding`, {
+        method: 'POST'
+      });
+      const emp = employees.value.find(e => e.id === empId);
+      if (emp) {
+        emp.onboardingStatus = 'APPROVED';
+        emp.onboardingPercent = 100;
+      }
+      return true;
+    } catch (e) {
+      console.error('Approval failed:', e);
+      return false;
+    }
   }
 
   return {
@@ -1102,6 +1696,7 @@ export const useHrStore = defineStore('hr', () => {
     schedulerJobs,
     auditLogs,
     backendConnected,
+    mandatoryDocuments,
     // Methods
     addLog,
     addNotification,
@@ -1128,6 +1723,18 @@ export const useHrStore = defineStore('hr', () => {
     fetchExpenses,
     fetchPayslips,
     fetchNotifications,
-    syncAll
+    approveOnboarding,
+    syncAll,
+    fetchMandatoryDocuments,
+    addMandatoryDocument,
+    fetchEmployeeDocuments,
+    uploadDocument,
+    deleteDocument,
+    fetchPublicHolidays,
+    addPublicHoliday,
+    uploadLeaveAttachment,
+    uploadExpenseReceipt,
+    generatePayrollRun,
+    calculateLeaveDaysFrontend
   };
 });

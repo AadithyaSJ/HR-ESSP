@@ -50,7 +50,12 @@ CREATE TABLE employees (
     joining_date DATE NOT NULL,
     status VARCHAR(50) DEFAULT 'ACTIVE',
     salary NUMERIC(15,2),
-    salary_band VARCHAR(100)
+    salary_band VARCHAR(100),
+    school VARCHAR(500),
+    college VARCHAR(500),
+    experience TEXT,
+    certificates TEXT,
+    onboarding_status VARCHAR(50) DEFAULT 'APPROVED'
 );
 
 -- 4. Leave Balances table

@@ -53,4 +53,19 @@ public class PayrollController {
         payrollService.publishPayslips(month, year);
         return ResponseEntity.ok(ApiResponse.success(null, "Payslips published successfully for " + month + " " + year));
     }
+
+    @GetMapping("/all")
+    @PreAuthorize("hasAnyRole('HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<List<Payslip>>> getAllPayslips() {
+        return ResponseEntity.ok(ApiResponse.success(payrollService.getAllPayslips()));
+    }
+
+    @PostMapping("/generate")
+    @PreAuthorize("hasAnyRole('FINANCE_ADMIN', 'HR_ADMIN')")
+    public ResponseEntity<ApiResponse<List<Payslip>>> generatePayslips(
+            @RequestParam String month,
+            @RequestParam Integer year) {
+        List<Payslip> generated = payrollService.generatePayslips(month, year);
+        return ResponseEntity.ok(ApiResponse.success(generated, "Draft payslips generated successfully for all active employees"));
+    }
 }

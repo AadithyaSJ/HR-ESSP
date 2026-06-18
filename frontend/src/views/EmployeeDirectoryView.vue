@@ -45,6 +45,10 @@ const inspectorSalaryBand = ref('');
 onMounted(() => {
   activeTab.value = route.meta.tab || 'directory';
   checkRouteParams();
+  hrStore.fetchMandatoryDocuments();
+  hrStore.employees.forEach(emp => {
+    hrStore.fetchEmployeeDocuments(emp.id);
+  });
 });
 
 watch(() => route.params.id, () => {
@@ -113,7 +117,7 @@ function exportToCSV() {
 }
 
 // Save Employee Form
-function handleCreateEmployee() {
+async function handleCreateEmployee() {
   if (!newEmpCode.value || !newEmpName.value || !newEmpEmail.value || !newEmpJoinDate.value) {
     window.showPortalToast('Please fill all required fields', 'error');
     return;
@@ -137,9 +141,12 @@ function handleCreateEmployee() {
     salaryBand: newEmpSalaryBand.value
   };
 
-  const added = hrStore.addNewEmployee(data, authStore.user.email);
+  const added = await hrStore.addNewEmployee(data, authStore.user.email);
   if (added) {
     window.showPortalToast('Employee created and onboarding checklist triggered', 'success');
+    
+    // Show welcome link in an alert dialog so it can be copied for local testing
+    alert(`Employee created successfully!\n\nHere is the Welcome Email Link dispatched to the employee:\n\n${added.welcomeLink}\n\nCopy this link and open it in a new window/private tab to set their initial password and complete onboarding details.`);
     
     // Clear form
     newEmpCode.value = '';
@@ -149,6 +156,17 @@ function handleCreateEmployee() {
     
     // Switch to directory
     changeTab('directory');
+  }
+}
+
+async function handleApproveOnboarding(empId) {
+  const success = await hrStore.approveOnboarding(empId);
+  if (success) {
+    window.showPortalToast('Employee onboarding approved successfully. Credentials activated.', 'success');
+    // Refresh selected employee reference to update view
+    selectedEmp.value = hrStore.employees.find(e => e.id === empId);
+  } else {
+    window.showPortalToast('Failed to approve employee onboarding.', 'error');
   }
 }
 
@@ -195,17 +213,68 @@ function toggleInspectorOnboardingTask(taskId) {
   window.showPortalToast('Checked task for employee onboarding', 'info');
 }
 
-// Global Document Logs Listing
+// Global Document Logs Listing & Operations
+import { API_BASE_URL } from '../config.js';
+
+const newMandatoryName = ref('');
+
+async function handleAddMandatoryDocument() {
+  if (!newMandatoryName.value || !newMandatoryName.value.trim()) {
+    window.showPortalToast('Please enter a document name.', 'error');
+    return;
+  }
+  const success = await hrStore.addMandatoryDocument(newMandatoryName.value.trim(), authStore.user.email);
+  if (success) {
+    window.showPortalToast(`Required document type "${newMandatoryName.value}" added successfully.`, 'success');
+    newMandatoryName.value = '';
+  } else {
+    window.showPortalToast('Failed to add mandatory document.', 'error');
+  }
+}
+
+function downloadEmployeeDoc(empId, doc) {
+  const token = localStorage.getItem('jwt_token');
+  const url = `${API_BASE_URL}/api/v1/employees/${empId}/documents/${doc.id}/download`;
+  
+  window.showPortalToast(`Downloading ${doc.name}...`, 'info');
+  fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  })
+  .then(response => {
+    if (!response.ok) throw new Error('Download failed');
+    return response.blob();
+  })
+  .then(blob => {
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.setAttribute('download', doc.name);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+  })
+  .catch(err => {
+    console.error(err);
+    window.showPortalToast('Failed to download document.', 'error');
+  });
+}
+
 const allDocuments = computed(() => {
   const docs = [];
   hrStore.employees.forEach(emp => {
-    emp.documents.forEach(doc => {
-      docs.push({
-        ...doc,
-        employeeName: emp.fullName,
-        employeeCode: emp.employeeCode
+    if (emp.documents) {
+      emp.documents.forEach(doc => {
+        docs.push({
+          ...doc,
+          employeeId: emp.id,
+          employeeName: emp.fullName,
+          employeeCode: emp.employeeCode
+        });
       });
-    });
+    }
   });
   return docs;
 });
@@ -304,7 +373,9 @@ const allDocuments = computed(() => {
             <div class="flex-1 min-w-0">
               <div class="flex items-center justify-between mb-1">
                 <span class="badge badge-muted font-mono text-xs">{{ emp.employeeCode }}</span>
-                <span class="badge" :class="emp.status === 'ACTIVE' ? 'badge-success' : 'badge-danger'">{{ emp.status }}</span>
+                <span v-if="emp.onboardingStatus === 'PENDING_DETAILS'" class="badge badge-info">PENDING DETAILS</span>
+                <span v-else-if="emp.onboardingStatus === 'PENDING_APPROVAL'" class="badge badge-warning">PENDING APPROVAL</span>
+                <span v-else class="badge" :class="emp.status === 'ACTIVE' ? 'badge-success' : 'badge-danger'">{{ emp.status }}</span>
               </div>
               <h3 class="text-base font-bold text-truncate">{{ emp.fullName }}</h3>
               <p class="text-secondary text-xs font-semibold text-truncate mb-2">{{ emp.designation }}</p>
@@ -438,6 +509,35 @@ const allDocuments = computed(() => {
             
             <form @submit.prevent="handleSaveInspector">
               <div class="grid-12">
+                <!-- Onboarding verification review -->
+                <div v-if="selectedEmp.onboardingStatus === 'PENDING_APPROVAL' || selectedEmp.onboardingStatus === 'PENDING_DETAILS'" class="col-12 onboarding-review-panel mb-6 p-4 rounded" style="background: rgba(245, 158, 11, 0.05); border: 1px solid rgba(245, 158, 11, 0.2); width: 100%;">
+                  <h3 class="text-sm font-bold mb-3 flex items-center gap-2" style="color: #f59e0b; margin-top: 0;">
+                    <IconHelper name="clock" size="16" />
+                    Onboarding Verification Review (Status: {{ selectedEmp.onboardingStatus }})
+                  </h3>
+                  
+                  <div class="grid-12 gap-3 mb-4">
+                    <div class="col-6 mb-2" style="padding-left: 0;">
+                      <span class="text-xs text-muted block" style="font-size: 11px; display: block; margin-bottom: 2px;">School Background</span>
+                      <p class="text-xs font-semibold m-0" style="font-size: 12px; font-weight: 600;">{{ selectedEmp.school || 'Not entered yet' }}</p>
+                    </div>
+                    <div class="col-6 mb-2" style="padding-left: 0;">
+                      <span class="text-xs text-muted block" style="font-size: 11px; display: block; margin-bottom: 2px;">College / University</span>
+                      <p class="text-xs font-semibold m-0" style="font-size: 12px; font-weight: 600;">{{ selectedEmp.college || 'Not entered yet' }}</p>
+                    </div>
+                    <div class="col-12" style="padding-left: 0;">
+                      <span class="text-xs text-muted block" style="font-size: 11px; display: block; margin-bottom: 2px;">Previous Work Experience</span>
+                      <p class="text-xs font-semibold m-0" style="font-size: 12px; font-weight: 600; white-space: pre-wrap;">{{ selectedEmp.experience || 'Not entered yet' }}</p>
+                    </div>
+                  </div>
+
+                  <div class="flex justify-end gap-3 mt-4 pt-4" style="border-top: 1px solid rgba(255,255,255,0.05);" v-if="selectedEmp.onboardingStatus === 'PENDING_APPROVAL'">
+                    <button type="button" class="btn btn-primary btn-sm" @click="handleApproveOnboarding(selectedEmp.id)">
+                      Approve Onboarding Profile
+                    </button>
+                  </div>
+                </div>
+
                 <h4 class="col-12 section-header">Employment Parameters</h4>
                 <div class="col-6 form-group">
                   <label class="form-label">Department</label>
@@ -561,42 +661,80 @@ const allDocuments = computed(() => {
 
     <!-- TAB 4: GLOBAL DOCUMENTS LIST -->
     <template v-if="activeTab === 'documents' && authStore.activeRole === 'HR_ADMIN'">
-      <div class="glass-card">
-        <h3 class="mb-6">Global Document Logs</h3>
-        <div class="table-container">
-          <table class="table">
-            <thead>
-              <tr>
-                <th>Employee</th>
-                <th>File Name</th>
-                <th>Category</th>
-                <th>Date Uploaded</th>
-                <th>File Size</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(doc, idx) in allDocuments" :key="idx">
-                <td>
-                  <div class="flex flex-col">
-                    <span class="font-bold text-sm">{{ doc.employeeName }}</span>
-                    <span class="font-mono text-xs text-secondary">{{ doc.employeeCode }}</span>
-                  </div>
-                </td>
-                <td>
-                  <div class="flex items-center gap-2">
-                    <IconHelper name="file-text" size="16" color="#94a3b8" />
-                    <span>{{ doc.name }}</span>
-                  </div>
-                </td>
-                <td><span class="badge badge-muted">{{ doc.type }}</span></td>
-                <td>{{ doc.date }}</td>
-                <td>{{ doc.size }}</td>
-              </tr>
-              <tr v-if="allDocuments.length === 0">
-                <td colspan="5" class="text-center text-secondary">No documents logged in database.</td>
-              </tr>
-            </tbody>
-          </table>
+      <div class="grid-12">
+        <!-- Left: Manage Mandatory Document Requirements -->
+        <div class="col-4">
+          <div class="glass-card mb-6">
+            <h3 class="mb-4">Add Required Document</h3>
+            <div class="form-group">
+              <label class="form-label">Required Document Name</label>
+              <input type="text" v-model="newMandatoryName" class="form-control" placeholder="e.g. Passport, Tax Declaration Form" />
+            </div>
+            <button class="btn btn-primary btn-sm btn-full mt-2" @click="handleAddMandatoryDocument">
+              <IconHelper name="plus" size="14" /> Add Mandatory Document
+            </button>
+          </div>
+
+          <div class="glass-card">
+            <h3 class="mb-4">Mandatory Document Types</h3>
+            <div class="mandatory-docs-list-hr">
+              <div v-for="mDoc in hrStore.mandatoryDocuments" :key="mDoc.id" class="p-3 mb-2 rounded border" style="background: rgba(255, 255, 255, 0.01); border-color: var(--border-color)">
+                <div class="flex items-center justify-between">
+                  <span class="font-semibold text-sm">{{ mDoc.name }}</span>
+                  <span class="text-xs text-secondary">Required</span>
+                </div>
+              </div>
+              <div v-if="hrStore.mandatoryDocuments.length === 0" class="text-center text-secondary text-xs p-4">
+                No mandatory documents defined yet.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Global Document Logs -->
+        <div class="col-8">
+          <div class="glass-card">
+            <h3 class="mb-6">Global Document Logs</h3>
+            <div class="table-container">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>File Name</th>
+                    <th>Category</th>
+                    <th>Date Uploaded</th>
+                    <th class="text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(doc, idx) in allDocuments" :key="idx">
+                    <td>
+                      <div class="flex flex-col">
+                        <span class="font-bold text-sm">{{ doc.employeeName }}</span>
+                        <span class="font-mono text-xs text-secondary">{{ doc.employeeCode }}</span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="flex items-center gap-2">
+                        <IconHelper name="file-text" size="16" color="#94a3b8" />
+                        <span class="text-truncate" style="max-width: 150px;" :title="doc.name">{{ doc.name }}</span>
+                      </div>
+                    </td>
+                    <td><span class="badge badge-muted text-xs">{{ doc.type }}</span></td>
+                    <td>{{ doc.date }}</td>
+                    <td class="text-right">
+                      <button class="btn btn-ghost btn-sm" @click="downloadEmployeeDoc(doc.employeeId, doc)" title="Download file">
+                        <IconHelper name="download" size="14" />
+                      </button>
+                    </td>
+                  </tr>
+                  <tr v-if="allDocuments.length === 0">
+                    <td colspan="5" class="text-center text-secondary">No documents logged in database.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </template>

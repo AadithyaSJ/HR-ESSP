@@ -13,6 +13,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import org.springframework.web.multipart.MultipartFile;
+
 @RestController
 @RequestMapping("/api/v1/expenses")
 public class ExpenseController {
@@ -28,8 +35,12 @@ public class ExpenseController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
-    public ResponseEntity<ApiResponse<List<ExpenseClaim>>> getClaims(@RequestParam UUID employeeId) {
-        return ResponseEntity.ok(ApiResponse.success(expenseService.getClaimsByEmployee(employeeId)));
+    public ResponseEntity<ApiResponse<List<ExpenseClaim>>> getClaims(@RequestParam(required = false) UUID employeeId) {
+        if (employeeId != null) {
+            return ResponseEntity.ok(ApiResponse.success(expenseService.getClaimsByEmployee(employeeId)));
+        } else {
+            return ResponseEntity.ok(ApiResponse.success(expenseService.getAllClaims()));
+        }
     }
 
     @GetMapping("/manager")
@@ -101,9 +112,52 @@ public class ExpenseController {
         return ResponseEntity.ok(ApiResponse.success(claim, "Expense rejected by finance"));
     }
 
+    @PostMapping("/{id}/pay")
+    @PreAuthorize("hasRole('FINANCE_ADMIN')")
+    public ResponseEntity<ApiResponse<ExpenseClaim>> payExpense(@PathVariable UUID id) {
+        ExpenseClaim claim = expenseService.payExpense(id);
+        return ResponseEntity.ok(ApiResponse.success(claim, "Expense marked as paid"));
+    }
+
     @GetMapping("/{id}/receipts")
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<List<ExpenseReceipt>>> getReceipts(@PathVariable UUID id) {
         return ResponseEntity.ok(ApiResponse.success(expenseService.getReceipts(id)));
+    }
+
+    @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<ExpenseClaim>> cancelClaim(@PathVariable UUID id) {
+        ExpenseClaim claim = expenseService.cancelClaim(id);
+        return ResponseEntity.ok(ApiResponse.success(claim, "Expense claim cancelled successfully"));
+    }
+
+    @PostMapping("/upload")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<Map<String, String>>> uploadReceipt(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("File cannot be empty");
+        }
+        
+        String originalFileName = org.springframework.util.StringUtils.cleanPath(file.getOriginalFilename());
+        if (originalFileName.contains("..")) {
+            throw new RuntimeException("Filename contains invalid path sequence " + originalFileName);
+        }
+        
+        try {
+            Path storageLoc = Paths.get("uploads", "receipts").toAbsolutePath().normalize();
+            Files.createDirectories(storageLoc);
+            
+            String cleanFileName = System.currentTimeMillis() + "_" + originalFileName;
+            Path targetLocation = storageLoc.resolve(cleanFileName);
+            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+            
+            return ResponseEntity.ok(ApiResponse.success(Map.of(
+                "fileName", cleanFileName,
+                "filePath", targetLocation.toString()
+            ), "Receipt uploaded successfully"));
+        } catch (IOException ex) {
+            throw new RuntimeException("Could not store file " + originalFileName, ex);
+        }
     }
 }

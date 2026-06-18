@@ -53,6 +53,11 @@ const routes = [
     meta: { tab: 'onboarding' }
   },
   {
+    path: '/onboarding-setup',
+    name: 'onboarding-setup',
+    component: () => import('../views/OnboardingSetupView.vue')
+  },
+  {
     path: '/documents',
     name: 'documents',
     component: ProfileView,
@@ -122,7 +127,7 @@ const routes = [
     path: '/manager/expense',
     name: 'manager-expense',
     component: ExpenseHubView,
-    meta: { tab: 'approvals', roles: ['MANAGER'] }
+    meta: { tab: 'approvals' }
   },
   {
     path: '/finance/expense',
@@ -134,13 +139,13 @@ const routes = [
     path: '/admin/expense-limits',
     name: 'admin-expense-limits',
     component: ExpenseHubView,
-    meta: { tab: 'limits', roles: ['HR_ADMIN'] }
+    meta: { tab: 'limits' }
   },
   {
     path: '/admin/currency-rates',
     name: 'admin-currency-rates',
     component: ExpenseHubView,
-    meta: { tab: 'currencies', roles: ['HR_ADMIN', 'FINANCE_ADMIN'] }
+    meta: { tab: 'currencies' }
   },
 
   // --- PAYSLIP & PAYROLL ---
@@ -274,9 +279,19 @@ router.beforeEach((to, from, next) => {
   // If not logged in and going to non-public page, redirect to login
   if (!authStore.isAuthenticated && !to.meta.public) {
     next('/login')
+    return
   } 
+
+  // If logged in and onboarding is not approved, restrict them strictly to /onboarding-setup
+  if (authStore.isAuthenticated && authStore.user.onboardingStatus && authStore.user.onboardingStatus !== 'APPROVED') {
+    if (to.name !== 'onboarding-setup' && to.name !== 'session-expired') {
+      next('/onboarding-setup')
+      return
+    }
+  }
+
   // If logged in and going to login/forgot password, redirect to profile
-  else if (authStore.isAuthenticated && to.meta.public && to.name !== 'session-expired') {
+  if (authStore.isAuthenticated && to.meta.public && to.name !== 'session-expired') {
     next('/profile')
   }
   // Role checks

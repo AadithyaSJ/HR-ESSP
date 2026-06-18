@@ -72,7 +72,7 @@ function handleReceiptSelect(e) {
 }
 
 // Submit claim
-function handleSendClaim() {
+async function handleSendClaim() {
   if (!expenseAmount.value || !expenseDate.value || !expenseDesc.value) {
     window.showPortalToast('Please fill all required claim details', 'error');
     return;
@@ -84,6 +84,18 @@ function handleSendClaim() {
     window.showPortalToast(`⚠️ Request exceeds policy category limit of ${limitRule.maxAmount}. Submitted anyway for approval.`, 'warning');
   }
 
+  let finalReceiptName = 'uploaded_receipt.pdf';
+  if (uploadedFile.value) {
+    try {
+      const uploadResult = await hrStore.uploadExpenseReceipt(uploadedFile.value);
+      if (uploadResult && uploadResult.fileName) {
+        finalReceiptName = uploadResult.fileName;
+      }
+    } catch (err) {
+      window.showPortalToast('Failed to upload receipt file, submitting without it', 'error');
+    }
+  }
+
   const payload = {
     employeeCode: authStore.user.employeeCode,
     fullName: authStore.user.fullName,
@@ -93,10 +105,10 @@ function handleSendClaim() {
     currency: expenseCurrency.value,
     date: expenseDate.value,
     description: expenseDesc.value,
-    receiptName: uploadedFile.value ? uploadedFile.value.name : 'uploaded_receipt.pdf'
+    receiptName: finalReceiptName
   };
 
-  hrStore.submitExpenseClaim(payload, authStore.user.email);
+  await hrStore.submitExpenseClaim(payload, authStore.user.email);
   window.showPortalToast('Expense claim submitted for approval', 'success');
 
   // Reset
@@ -104,17 +116,25 @@ function handleSendClaim() {
   expenseDesc.value = '';
   uploadedFile.value = null;
 }
-
-function handleCancelClaim(id) {
-  const success = hrStore.cancelExpenseClaim(id, authStore.user.email);
+async function handleCancelClaim(id) {
+  const success = await hrStore.cancelExpenseClaim(id, authStore.user.email);
   if (success) {
     window.showPortalToast('Pending expense claim cancelled', 'info');
   }
 }
-
 // Manager Approvals
+const hasReports = computed(() => {
+  return hrStore.employees.some(e => e.managerId === authStore.user.id);
+});
+
 const managerApprovalsList = computed(() => {
-  return hrStore.expenseClaims.filter(c => c.status === 'PENDING');
+  return hrStore.expenseClaims.filter(c => {
+    if (c.status !== 'PENDING') return false;
+    if (authStore.activeRole === 'HR_ADMIN') return true;
+    
+    const emp = hrStore.employees.find(e => e.id === c.employeeId || e.employeeCode === c.employeeCode);
+    return emp && emp.managerId === authStore.user.id;
+  });
 });
 
 function handleManagerApprove(id) {
@@ -131,7 +151,7 @@ function handleManagerReject(req) {
 
 // Finance Queue
 const financeQueueList = computed(() => {
-  return hrStore.expenseClaims.filter(c => ['APPROVED_MANAGER', 'APPROVED_FINANCE'].includes(c.status));
+  return hrStore.expenseClaims;
 });
 
 function openFinanceReview(claim, action) {
@@ -247,15 +267,7 @@ function handleAddCurrency() {
           My Expenses
         </button>
         <button
-          v-if="['MANAGER', 'HR_ADMIN'].includes(authStore.activeRole)"
-          class="tab-btn"
-          :class="{ active: activeTab === 'approvals' }"
-          @click="changeTab('approvals')"
-        >
-          Team Expense Approvals
-        </button>
-        <button
-          v-if="['FINANCE_ADMIN', 'HR_ADMIN'].includes(authStore.activeRole)"
+          v-if="authStore.activeRole === 'FINANCE_ADMIN'"
           class="tab-btn"
           :class="{ active: activeTab === 'finance-queue' }"
           @click="changeTab('finance-queue')"
@@ -263,7 +275,6 @@ function handleAddCurrency() {
           Finance Queue
         </button>
         <button
-          v-if="authStore.activeRole === 'HR_ADMIN'"
           class="tab-btn"
           :class="{ active: activeTab === 'limits' }"
           @click="changeTab('limits')"
@@ -271,7 +282,6 @@ function handleAddCurrency() {
           Expense Limits Config
         </button>
         <button
-          v-if="['HR_ADMIN', 'FINANCE_ADMIN'].includes(authStore.activeRole)"
           class="tab-btn"
           :class="{ active: activeTab === 'currencies' }"
           @click="changeTab('currencies')"
@@ -292,9 +302,14 @@ function handleAddCurrency() {
               <div class="form-group">
                 <label class="form-label">Expense Category</label>
                 <select v-model="expenseCategory" class="form-control">
-                  <option value="Travel">Travel / Flights</option>
-                  <option value="Meals">Meals / Client Dinner</option>
+                  <option value="Travel">Travel / Cabs / Flights</option>
                   <option value="Accommodation">Accommodation / Hotel</option>
+                  <option value="Meals">Meals / Client Dinner</option>
+                  <option value="Broadband">Internet / Broadband Allowance</option>
+                  <option value="Mobile">Mobile / Phone Bill Allowance</option>
+                  <option value="HomeOffice">Home Office Setup / Chair</option>
+                  <option value="Wellness">Wellness / Gym / Health</option>
+                  <option value="Certification">Training / Certifications</option>
                   <option value="Other">Other Expenses</option>
                 </select>
               </div>
@@ -379,7 +394,7 @@ function handleAddCurrency() {
                     <td>
                       <span
                         class="badge"
-                        :class="c.status === 'PAID' ? 'badge-success' : c.status === 'APPROVED_FINANCE' ? 'badge-success' : c.status === 'APPROVED_MANAGER' ? 'badge-info' : c.status === 'PENDING' ? 'badge-warning' : 'badge-danger'"
+                        :class="c.status === 'PAID' ? 'badge-success' : c.status === 'APPROVED_FINANCE' ? 'badge-success' : c.status === 'APPROVED_MANAGER' ? 'badge-info' : ['PENDING', 'PENDING_FINANCE'].includes(c.status) ? 'badge-warning' : 'badge-danger'"
                       >
                         {{ c.status.replace('_', ' ') }}
                       </span>
@@ -389,7 +404,7 @@ function handleAddCurrency() {
                         <button class="btn btn-ghost btn-sm px-2" @click="openFinanceReview(c, 'VIEW')" title="View approval history timeline">
                           <IconHelper name="clock" size="14" />
                         </button>
-                        <button v-if="c.status === 'PEND'" class="btn btn-danger btn-sm px-2 py-6" @click="handleCancelClaim(c.id)">
+                        <button v-if="['PENDING', 'PENDING_FINANCE'].includes(c.status)" class="btn btn-danger btn-sm px-2 py-6" @click="handleCancelClaim(c.id)">
                           Cancel
                         </button>
                       </div>
@@ -407,7 +422,7 @@ function handleAddCurrency() {
     </template>
 
     <!-- TAB 2: MANAGER APPROVALS -->
-    <template v-if="activeTab === 'approvals' && ['MANAGER', 'HR_ADMIN'].includes(authStore.activeRole)">
+    <template v-if="activeTab === 'approvals' && (['MANAGER', 'HR_ADMIN'].includes(authStore.activeRole) || hasReports)">
       <div class="glass-card">
         <h3 class="mb-6">Pending Manager Approvals</h3>
         <div class="table-container">
@@ -458,7 +473,7 @@ function handleAddCurrency() {
     </template>
 
     <!-- TAB 3: FINANCE QUEUE -->
-    <template v-if="activeTab === 'finance-queue' && ['FINANCE_ADMIN', 'HR_ADMIN'].includes(authStore.activeRole)">
+    <template v-if="activeTab === 'finance-queue' && authStore.activeRole === 'FINANCE_ADMIN'">
       <div class="glass-card">
         <div class="flex justify-between items-center mb-6">
           <h3>Finance Audit Queue</h3>
@@ -505,20 +520,20 @@ function handleAddCurrency() {
                   <span v-else class="badge badge-success">✓ Unique Submission</span>
                 </td>
                 <td>
-                  <span class="badge" :class="c.status === 'APPROVED_FINANCE' ? 'badge-success' : 'badge-info'">
+                  <span class="badge" :class="c.status === 'PAID' ? 'badge-success' : c.status === 'APPROVED_FINANCE' ? 'badge-success' : ['APPROVED_MANAGER', 'PENDING_FINANCE'].includes(c.status) ? 'badge-info' : 'badge-danger'">
                     {{ c.status.replace('_', ' ') }}
                   </span>
                   <div v-if="c.paymentRef" class="text-xs font-mono text-muted mt-1">Ref: {{ c.paymentRef }}</div>
                 </td>
                 <td class="text-right">
                   <div class="flex gap-2 justify-end">
-                    <button v-if="c.status === 'APPROVED_MANAGER'" class="btn btn-primary btn-sm px-2 py-6" @click="openFinanceReview(c, 'APPROVE')">
+                    <button v-if="['APPROVED_MANAGER', 'PENDING_FINANCE'].includes(c.status)" class="btn btn-primary btn-sm px-2 py-6" @click="openFinanceReview(c, 'APPROVE')">
                       Approve Payout
                     </button>
                     <button v-if="c.status === 'APPROVED_FINANCE'" class="btn btn-success btn-sm px-2 py-6" @click="openFinanceReview(c, 'PAY')">
                       Mark Paid
                     </button>
-                    <button v-if="c.status === 'APPROVED_MANAGER'" class="btn btn-danger btn-sm px-2 py-6" @click="openFinanceReview(c, 'REJECT')">
+                    <button v-if="['APPROVED_MANAGER', 'PENDING_FINANCE'].includes(c.status)" class="btn btn-danger btn-sm px-2 py-6" @click="openFinanceReview(c, 'REJECT')">
                       Reject
                     </button>
                   </div>
@@ -534,10 +549,10 @@ function handleAddCurrency() {
     </template>
 
     <!-- TAB 4: EXPENSE LIMITS -->
-    <template v-if="activeTab === 'limits' && authStore.activeRole === 'HR_ADMIN'">
+    <template v-if="activeTab === 'limits'">
       <div class="grid-12">
         <!-- List Limits -->
-        <div class="col-8">
+        <div :class="authStore.activeRole === 'FINANCE_ADMIN' ? 'col-8' : 'col-12'">
           <div class="glass-card">
             <h3 class="mb-6">Expense Policy Limit Rules</h3>
             <div class="table-container">
@@ -548,7 +563,7 @@ function handleAddCurrency() {
                     <th>Maximum Cap Limit</th>
                     <th>Frequency</th>
                     <th>Grade Eligibility</th>
-                    <th class="text-right">Action</th>
+                    <th v-if="authStore.activeRole === 'FINANCE_ADMIN'" class="text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -557,7 +572,7 @@ function handleAddCurrency() {
                     <td class="font-mono">INR {{ l.maxAmount }}</td>
                     <td>{{ l.frequency.replace('_', ' ') }}</td>
                     <td>{{ l.grade }}</td>
-                    <td class="text-right">
+                    <td v-if="authStore.activeRole === 'FINANCE_ADMIN'" class="text-right">
                       <button class="btn btn-ghost btn-sm text-danger-btn px-2" @click="handleDeactivateLimit(l.id)">
                         <IconHelper name="trash" size="14" />
                       </button>
@@ -570,7 +585,7 @@ function handleAddCurrency() {
         </div>
 
         <!-- Add Limit form -->
-        <div class="col-4">
+        <div v-if="authStore.activeRole === 'FINANCE_ADMIN'" class="col-4">
           <div class="glass-card">
             <h3 class="mb-6">Add Policy Limit Rule</h3>
             <form @submit.prevent="handleAddLimit">
@@ -616,11 +631,10 @@ function handleAddCurrency() {
       </div>
     </template>
 
-    <!-- TAB 5: CURRENCY RATES -->
-    <template v-if="activeTab === 'currencies' && ['HR_ADMIN', 'FINANCE_ADMIN'].includes(authStore.activeRole)">
+    <template v-if="activeTab === 'currencies'">
       <div class="grid-12">
         <!-- Supported Currencies table -->
-        <div class="col-8">
+        <div :class="authStore.activeRole === 'FINANCE_ADMIN' ? 'col-8' : 'col-12'">
           <div class="glass-card">
             <h3 class="mb-6">Exchange Rate Matrix</h3>
             <div class="table-container">
@@ -636,14 +650,15 @@ function handleAddCurrency() {
                   <tr v-for="c in hrStore.currencyRates" :key="c.code">
                     <td class="font-bold">{{ c.code }}</td>
                     <td>
-                      <input type="number" step="0.01" v-model="c.rate" class="form-control text-xs w-120 py-1" />
+                      <input v-if="authStore.activeRole === 'FINANCE_ADMIN'" type="number" step="0.01" v-model="c.rate" class="form-control text-xs w-120 py-1" />
+                      <span v-else class="font-mono">{{ c.rate }}</span>
                     </td>
                     <td>{{ c.symbol }}</td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <div class="flex justify-end mt-4">
+            <div v-if="authStore.activeRole === 'FINANCE_ADMIN'" class="flex justify-end mt-4">
               <button class="btn btn-primary btn-sm" @click="window.showPortalToast('Currency exchange rates updated', 'success')">
                 Save Exchange Matrix
               </button>
@@ -652,7 +667,7 @@ function handleAddCurrency() {
         </div>
 
         <!-- Add currency form -->
-        <div class="col-4">
+        <div v-if="authStore.activeRole === 'FINANCE_ADMIN'" class="col-4">
           <div class="glass-card">
             <h3 class="mb-6">Add Currency</h3>
             <form @submit.prevent="handleAddCurrency">
