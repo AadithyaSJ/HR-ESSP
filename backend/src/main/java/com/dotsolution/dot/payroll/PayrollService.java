@@ -275,4 +275,25 @@ public class PayrollService {
         }
         return totalExpenses;
     }
+
+    public void rejectPayslips(String month, Integer year) {
+        List<Payslip> payslips = payslipRepository.findByMonthAndYear(month, year);
+        for (Payslip p : payslips) {
+            if (!p.getPublished()) {
+                payslipRepository.delete(p);
+            }
+        }
+    }
+
+    public Payslip updatePayslip(UUID id, Payslip details) {
+        Payslip existing = payslipRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Payslip not found: " + id));
+        if (existing.getPublished()) {
+            throw new IllegalStateException("Cannot edit a published payslip");
+        }
+        existing.setGrossPay(details.getGrossPay());
+        existing.setDeduction(details.getDeduction());
+        existing.setNetPay(details.getGrossPay() - details.getDeduction());
+        return payslipRepository.save(existing);
+    }
 }

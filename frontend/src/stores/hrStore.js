@@ -1091,6 +1091,63 @@ export const useHrStore = defineStore('hr', () => {
     return false;
   }
 
+  async function rejectPayrollBatch(batchId, month, activeUserEmail) {
+    const batch = payrollBatches.value.find(b => b.id === batchId);
+    if (batch && batch.status === 'DRAFT') {
+      try {
+        const [yearStr, monthNum] = month.split('-');
+        const year = parseInt(yearStr);
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+        const monthName = months[parseInt(monthNum) - 1] || month;
+
+        await apiRequest(`/api/v1/payroll/reject?month=${monthName}&year=${year}`, { method: 'POST' });
+
+        // Remove matching batch
+        payrollBatches.value = payrollBatches.value.filter(b => b.id !== batchId);
+        
+        // Remove matching draft payslips
+        payslips.value = payslips.value.filter(ps => !(ps.month === month && ps.status === 'DRAFT'));
+        
+        addLog(activeUserEmail, 'Payroll', 'REJECT_BATCH', `Rejected and deleted draft payroll batch for month ${month}`);
+        return true;
+      } catch (e) {
+        console.error('Reject failed:', e.message);
+        return false;
+      }
+    }
+    return false;
+  }
+
+  async function updatePayslip(payslipId, data, activeUserEmail) {
+    try {
+      const payload = {
+        grossPay: parseFloat(data.grossPay),
+        deduction: parseFloat(data.deductions)
+      };
+      const updated = await apiRequest(`/api/v1/payroll/${payslipId}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload)
+      });
+      // Update local state
+      const ps = payslips.value.find(p => p.id === payslipId);
+      if (ps) {
+        ps.grossPay = updated.grossPay;
+        ps.deductions = updated.deduction;
+        ps.netSalary = updated.netPay;
+        // Also update calculated fields for breakdown
+        ps.basic = Math.round((updated.grossPay - updated.deduction) * 0.6);
+        ps.allowances = updated.grossPay - ps.basic;
+        ps.pf = Math.round(updated.deduction * 0.5);
+        ps.tax = updated.deduction - ps.pf;
+      }
+      addLog(activeUserEmail, 'Payroll', 'UPDATE_PAYSLIP', `Manually updated payslip ID ${payslipId}`);
+      return true;
+    } catch (e) {
+      console.error('Update payslip failed:', e.message);
+      return false;
+    }
+  }
+
   // HR employee management
   async function addNewEmployee(data, activeUserEmail) {
     const backendEmp = {
@@ -1714,6 +1771,8 @@ export const useHrStore = defineStore('hr', () => {
     markExpensePaid,
     processPayrollUpload,
     publishPayrollBatch,
+    rejectPayrollBatch,
+    updatePayslip,
     addNewEmployee,
     updateEmployeeHrView,
     triggerSchedulerJob,

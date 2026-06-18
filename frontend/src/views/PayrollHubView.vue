@@ -156,6 +156,35 @@ function handlePublishBatch(batchId, month) {
   }
 }
 
+function handleRejectBatch(batchId, month) {
+  if (confirm(`Are you sure you want to reject the draft payroll batch for ${month}? This will clear all draft payslips.`)) {
+    const success = hrStore.rejectPayrollBatch(batchId, month, authStore.user.email);
+    if (success) {
+      window.showPortalToast(`Payroll batch for ${month} rejected and draft records cleared.`, 'warning');
+    }
+  }
+}
+
+function recalculateNet(ps) {
+  ps.netSalary = ps.grossPay - ps.deductions;
+}
+
+async function handleSavePayslip(ps) {
+  try {
+    const success = await hrStore.updatePayslip(ps.id, {
+      grossPay: ps.grossPay,
+      deductions: ps.deductions
+    }, authStore.user.email);
+    if (success) {
+      window.showPortalToast(`Payslip updated for employee ${getEmployeeName(ps.employeeCode)}`, 'success');
+    } else {
+      window.showPortalToast(`Failed to update payslip`, 'error');
+    }
+  } catch (err) {
+    window.showPortalToast(`Error saving payslip: ${err.message}`, 'error');
+  }
+}
+
 // Batches history
 const allBatches = computed(() => {
   return hrStore.payrollBatches;
@@ -405,6 +434,10 @@ function getEmployeeName(code) {
                       <IconHelper name="eye" size="14" />
                       View Details
                     </button>
+                    <button class="btn btn-danger btn-sm px-2 py-6" @click="handleRejectBatch(b.id, b.month)">
+                      <IconHelper name="trash" size="14" />
+                      Reject Batch
+                    </button>
                     <button class="btn btn-success btn-sm px-2 py-6" @click="handlePublishBatch(b.id, b.month)">
                       <IconHelper name="check-circle" size="14" />
                       Confirm & Publish
@@ -495,7 +528,7 @@ function getEmployeeName(code) {
     </template>
 
     <!-- INLINE PAYSLIP MODAL -->
-    <div class="modal-overlay" v-if="showPayslipModal && activePayslip">
+    <div class="modal-overlay" v-if="showPayslipModal && activePayslip" style="z-index: 1010;">
       <div class="modal-content" style="max-width: 500px;">
         <div class="modal-header">
           <h3>Payslip Breakdown - {{ activePayslip.month }}</h3>
@@ -603,14 +636,30 @@ function getEmployeeName(code) {
                       <span class="text-xs text-secondary font-mono">{{ ps.employeeCode }}</span>
                     </div>
                   </td>
-                  <td class="font-mono text-xs">INR {{ ps.grossPay.toLocaleString() }}</td>
-                  <td class="font-mono text-xs text-danger">INR {{ ps.deductions.toLocaleString() }}</td>
-                  <td class="font-mono text-xs text-success font-semibold">INR {{ ps.netSalary.toLocaleString() }}</td>
+                  <td>
+                    <div class="flex items-center gap-1 font-mono text-xs">
+                      <span>INR</span>
+                      <input type="number" v-model.number="ps.grossPay" class="form-control text-xs py-1" style="width: 100px; padding: 2px 6px; height: auto;" @input="recalculateNet(ps)" />
+                    </div>
+                  </td>
+                  <td>
+                    <div class="flex items-center gap-1 font-mono text-xs text-danger">
+                      <span>INR</span>
+                      <input type="number" v-model.number="ps.deductions" class="form-control text-xs py-1 text-danger" style="width: 100px; padding: 2px 6px; height: auto;" @input="recalculateNet(ps)" />
+                    </div>
+                  </td>
+                  <td class="font-mono text-xs text-success font-semibold">INR {{ (ps.netSalary || 0).toLocaleString() }}</td>
                   <td class="text-right">
-                    <button class="btn btn-ghost btn-xs px-2" @click="openPayslip(ps)">
-                      <IconHelper name="eye" size="12" />
-                      Breakdown
-                    </button>
+                    <div class="flex gap-2 justify-end">
+                      <button class="btn btn-primary btn-xs px-2" @click="handleSavePayslip(ps)" title="Save edited draft">
+                        <IconHelper name="check-circle" size="12" />
+                        Save
+                      </button>
+                      <button class="btn btn-ghost btn-xs px-2" @click="openPayslip(ps)">
+                        <IconHelper name="eye" size="12" />
+                        Breakdown
+                      </button>
+                    </div>
                   </td>
                 </tr>
                 <tr v-if="selectedBatchPayslips.length === 0">
@@ -623,6 +672,10 @@ function getEmployeeName(code) {
 
         <div class="modal-footer">
           <button class="btn btn-secondary" @click="showBatchDetailsModal = false">Close</button>
+          <button class="btn btn-danger" @click="handleRejectBatch(selectedBatch.id, selectedBatch.month); showBatchDetailsModal = false;">
+            <IconHelper name="trash" size="14" />
+            Reject & Delete Draft
+          </button>
           <button class="btn btn-success" @click="handlePublishBatch(selectedBatch.id, selectedBatch.month); showBatchDetailsModal = false;">
             <IconHelper name="check-circle" size="14" />
             Confirm & Publish Batch

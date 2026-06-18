@@ -68,4 +68,22 @@ public class PayrollController {
         List<Payslip> generated = payrollService.generatePayslips(month, year);
         return ResponseEntity.ok(ApiResponse.success(generated, "Draft payslips generated successfully for all active employees"));
     }
+
+    @PostMapping("/reject")
+    @PreAuthorize("hasAnyRole('FINANCE_ADMIN', 'HR_ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> rejectPayslips(
+            @RequestParam String month,
+            @RequestParam Integer year) {
+        payrollService.rejectPayslips(month, year);
+        return ResponseEntity.ok(ApiResponse.success(null, "Draft payslips rejected and cleared successfully for " + month + " " + year));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('FINANCE_ADMIN', 'HR_ADMIN')")
+    public ResponseEntity<ApiResponse<Payslip>> updatePayslip(
+            @PathVariable UUID id,
+            @RequestBody Payslip payslipDetails) {
+        Payslip updated = payrollService.updatePayslip(id, payslipDetails);
+        return ResponseEntity.ok(ApiResponse.success(updated, "Payslip updated successfully"));
+    }
 }
