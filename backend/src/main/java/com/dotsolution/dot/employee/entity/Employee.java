@@ -70,4 +70,16 @@ public class Employee {
 
     @Column(name = "salary_band")
     private String salaryBand;
+
+    private String school;
+    private String college;
+    private String experience;
+    private String certificates;
+
+    @Column(name = "onboarding_status", length = 50)
+    @Builder.Default
+    private String onboardingStatus = "APPROVED";
+
+    @Transient
+    private String role;
 }

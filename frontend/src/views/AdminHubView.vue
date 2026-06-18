@@ -20,6 +20,11 @@ const moduleExpense = ref(true);
 const moduleLeave = ref(true);
 const modulePayroll = ref(true);
 
+const emailJsServiceId = ref('');
+const emailJsTemplateId = ref('');
+const emailJsPublicKey = ref('');
+const emailJsPrivateKey = ref('');
+
 // Email Template State
 const activeTemplate = ref(null);
 const templateSubject = ref('');
@@ -42,6 +47,11 @@ onMounted(() => {
   moduleLeave.value = hrStore.systemSettings.leaveModuleEnabled;
   modulePayroll.value = hrStore.systemSettings.payrollModuleEnabled;
   
+  emailJsServiceId.value = hrStore.systemSettings.emailJsServiceId || 'service_z913fuu';
+  emailJsTemplateId.value = hrStore.systemSettings.emailJsTemplateId || 'template_2mgjka9';
+  emailJsPublicKey.value = hrStore.systemSettings.emailJsPublicKey || 'rA7PvZze2DIvgX8WR';
+  emailJsPrivateKey.value = hrStore.systemSettings.emailJsPrivateKey || 'uRt0bEDyyVvuKCVnzAjET';
+  
   if (hrStore.emailTemplates.length > 0) {
     selectTemplate(hrStore.emailTemplates[0]);
   }
@@ -60,6 +70,11 @@ function handleSaveSettings() {
   hrStore.systemSettings.expenseModuleEnabled = moduleExpense.value;
   hrStore.systemSettings.leaveModuleEnabled = moduleLeave.value;
   hrStore.systemSettings.payrollModuleEnabled = modulePayroll.value;
+  
+  hrStore.systemSettings.emailJsServiceId = emailJsServiceId.value;
+  hrStore.systemSettings.emailJsTemplateId = emailJsTemplateId.value;
+  hrStore.systemSettings.emailJsPublicKey = emailJsPublicKey.value;
+  hrStore.systemSettings.emailJsPrivateKey = emailJsPrivateKey.value;
   
   // Update actual timeout limits
   authStore.timeLimitSeconds = timeoutInput.value * 60;
@@ -225,6 +240,24 @@ function toggleJob(jobId) {
                 <div class="col-12 form-group">
                   <label class="form-label">SAML Provider Public X.509 Certificate</label>
                   <textarea v-model="samlCertInput" class="form-control font-mono text-xs" rows="4"></textarea>
+                </div>
+
+                <h4 class="col-12 section-header">EmailJS Integration (Onboarding Invitations)</h4>
+                <div class="col-6 form-group">
+                  <label class="form-label">EmailJS Service ID</label>
+                  <input type="text" v-model="emailJsServiceId" class="form-control" />
+                </div>
+                <div class="col-6 form-group">
+                  <label class="form-label">EmailJS Template ID</label>
+                  <input type="text" v-model="emailJsTemplateId" class="form-control" placeholder="e.g. template_2mgjka9" />
+                </div>
+                <div class="col-6 form-group">
+                  <label class="form-label">EmailJS Public Key (API Key)</label>
+                  <input type="text" v-model="emailJsPublicKey" class="form-control" />
+                </div>
+                <div class="col-6 form-group">
+                  <label class="form-label">EmailJS Private Key (Access Token)</label>
+                  <input type="password" v-model="emailJsPrivateKey" class="form-control" />
                 </div>
 
                 <h4 class="col-12 section-header">Active Modules & Feature Flags</h4>

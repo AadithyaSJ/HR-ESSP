@@ -57,4 +57,24 @@ public class EmployeeController {
         employeeService.deactivateEmployee(id);
         return ResponseEntity.ok(ApiResponse.success(null, "Employee profile deactivated successfully"));
     }
+
+    @PostMapping("/{id}/approve-onboarding")
+    @PreAuthorize("hasRole('HR_ADMIN')")
+    public ResponseEntity<ApiResponse<Employee>> approveOnboarding(@PathVariable UUID id) {
+        Employee approved = employeeService.approveOnboarding(id);
+        return ResponseEntity.ok(ApiResponse.success(approved, "Employee onboarding approved successfully"));
+    }
+
+    @DeleteMapping("/email/{email}")
+    @PreAuthorize("hasAnyRole('HR_ADMIN', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<String>> deleteEmployeeByEmail(@PathVariable String email) {
+        boolean deleted = employeeService.deleteEmployeeByEmail(email);
+        if (deleted) {
+            return ResponseEntity.ok(ApiResponse.success("Employee with email " + email + " deleted successfully"));
+        } else {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error("Employee not found with email: " + email));
+        }
+    }
 }
+

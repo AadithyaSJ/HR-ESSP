@@ -1,11 +1,12 @@
 <script setup>
-import { ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import { useAuthStore } from '../stores/authStore.js';
 import { useHrStore } from '../stores/hrStore.js';
 import IconHelper from '../components/IconHelper.vue';
 
 const router = useRouter();
+const route = useRoute();
 const authStore = useAuthStore();
 const hrStore = useHrStore();
 
@@ -16,42 +17,53 @@ const showSsoModal = ref(false);
 const ssoProvider = ref('');
 const isSsoLoading = ref(false);
 
-function handleLocalLogin() {
+const isCreatePasswordMode = ref(false);
+const confirmPassword = ref('');
+
+onMounted(() => {
+  if (route.query.email) {
+    email.value = route.query.email;
+  }
+  if (route.query.action === 'create-password') {
+    isCreatePasswordMode.value = true;
+    password.value = '';
+  }
+});
+
+async function handleCreatePassword() {
+  if (!password.value || !confirmPassword.value) {
+    errorMsg.value = 'Please enter both password and confirm password';
+    return;
+  }
+  if (password.value !== confirmPassword.value) {
+    errorMsg.value = 'Passwords do not match';
+    return;
+  }
+  try {
+    errorMsg.value = '';
+    await authStore.createPassword(email.value, password.value);
+    hrStore.addLog(email.value, 'Auth', 'CREATE_PASSWORD', 'Successfully set password for new account');
+    window.showPortalToast('Password set successfully. Welcome!', 'success');
+    router.push('/onboarding-setup');
+  } catch (e) {
+    errorMsg.value = e.message || 'Failed to set password';
+  }
+}
+
+async function handleLocalLogin() {
   if (!email.value || !password.value) {
     errorMsg.value = 'Please enter both email and password';
     return;
   }
   
-  // Find matching employee by email to sync login profile
-  const matchedEmp = hrStore.employees.find(e => e.email === email.value);
-  if (matchedEmp) {
-    authStore.user = {
-      id: matchedEmp.id,
-      employeeCode: matchedEmp.employeeCode,
-      fullName: matchedEmp.fullName,
-      email: matchedEmp.email,
-      role: matchedEmp.role,
-      department: matchedEmp.department,
-      designation: matchedEmp.designation
-    };
-    authStore.activeRole = matchedEmp.role;
-  } else {
-    // Default mock user
-    authStore.user = {
-      id: 'emp-custom',
-      employeeCode: 'EMP2026999',
-      fullName: 'External Guest',
-      email: email.value,
-      role: 'EMPLOYEE',
-      department: 'Guest Office',
-      designation: 'Contractor'
-    };
-    authStore.activeRole = 'EMPLOYEE';
+  try {
+    errorMsg.value = '';
+    await authStore.login(email.value, password.value);
+    hrStore.addLog(email.value, 'Auth', 'LOGIN', 'Successful credential login');
+    router.push('/profile');
+  } catch (e) {
+    errorMsg.value = e.message || 'Login failed. Please check your credentials.';
   }
-
-  authStore.login(email.value, password.value);
-  hrStore.addLog(email.value, 'Auth', 'LOGIN', 'Successful credential login');
-  router.push('/profile');
 }
 
 function triggerSSO(provider) {
@@ -103,13 +115,60 @@ function completeSSO() {
       </div>
 
       <div class="glass-card login-card">
-        <h2 class="mb-6 text-center">Sign In</h2>
+        <h2 class="mb-6 text-center" v-if="isCreatePasswordMode">Create Password</h2>
+        <h2 class="mb-6 text-center" v-else>Sign In</h2>
         
         <div v-if="errorMsg" class="alert alert-error mb-4" style="min-width: 100%">
           <span>{{ errorMsg }}</span>
         </div>
 
-        <form @submit.prevent="handleLocalLogin">
+        <form v-if="isCreatePasswordMode" @submit.prevent="handleCreatePassword">
+          <div class="form-group">
+            <label class="form-label">Email Address</label>
+            <input
+              type="email"
+              v-model="email"
+              class="form-control"
+              placeholder="name@company.com"
+              disabled
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">New Password</label>
+            <input
+              type="password"
+              v-model="password"
+              class="form-control"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Confirm Password</label>
+            <input
+              type="password"
+              v-model="confirmPassword"
+              class="form-control"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-full mb-4">
+            Save Password & Log In
+          </button>
+
+          <div class="text-center">
+            <a href="#" @click.prevent="isCreatePasswordMode = false" class="text-xs">
+              Back to Sign In
+            </a>
+          </div>
+        </form>
+
+        <form v-else @submit.prevent="handleLocalLogin">
           <div class="form-group">
             <label class="form-label">Email Address</label>
             <input

@@ -3,12 +3,16 @@ package com.dotsolution.dot.leave;
 import com.dotsolution.dot.common.ApiResponse;
 import com.dotsolution.dot.leave.entity.LeaveBalance;
 import com.dotsolution.dot.leave.entity.LeaveRequest;
+import com.dotsolution.dot.leave.entity.PublicHoliday;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.nio.file.*;
 import java.util.*;
 
 @RestController
@@ -18,6 +22,9 @@ public class LeaveController {
     @Autowired
     private LeaveService leaveService;
 
+    @Autowired
+    private com.dotsolution.dot.leave.repository.PublicHolidayRepository publicHolidayRepository;
+
     @GetMapping("/balances")
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
     public ResponseEntity<ApiResponse<List<LeaveBalance>>> getBalances(@RequestParam UUID employeeId) {
@@ -26,8 +33,12 @@ public class LeaveController {
 
     @GetMapping("/requests")
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
-    public ResponseEntity<ApiResponse<List<LeaveRequest>>> getRequests(@RequestParam UUID employeeId) {
-        return ResponseEntity.ok(ApiResponse.success(leaveService.getLeaveRequests(employeeId)));
+    public ResponseEntity<ApiResponse<List<LeaveRequest>>> getRequests(@RequestParam(required = false) UUID employeeId) {
+        if (employeeId != null) {
+            return ResponseEntity.ok(ApiResponse.success(leaveService.getLeaveRequests(employeeId)));
+        } else {
+            return ResponseEntity.ok(ApiResponse.success(leaveService.getAllLeaveRequests()));
+        }
     }
 
     @GetMapping("/requests/manager")
@@ -71,24 +82,74 @@ public class LeaveController {
 
     @GetMapping("/holidays")
     @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
-    public ResponseEntity<ApiResponse<List<Map<String, Object>>>> getHolidays() {
-        List<Map<String, Object>> holidays = new ArrayList<>();
-        
-        holidays.add(createHoliday("New Year's Day", "2026-01-01", "National"));
-        holidays.add(createHoliday("Good Friday", "2026-04-03", "National"));
-        holidays.add(createHoliday("Labour Day", "2026-05-01", "Regional"));
-        holidays.add(createHoliday("Independence Day", "2026-08-15", "National"));
-        holidays.add(createHoliday("Gandhi Jayanti", "2026-10-02", "National"));
-        holidays.add(createHoliday("Christmas Day", "2026-12-25", "National"));
-        
-        return ResponseEntity.ok(ApiResponse.success(holidays, "Holiday list retrieved"));
+    public ResponseEntity<ApiResponse<List<PublicHoliday>>> getHolidays() {
+        return ResponseEntity.ok(ApiResponse.success(publicHolidayRepository.findAll(), "Holiday list retrieved"));
     }
 
-    private Map<String, Object> createHoliday(String name, String date, String type) {
-        Map<String, Object> h = new HashMap<>();
-        h.put("name", name);
-        h.put("date", date);
-        h.put("type", type);
-        return h;
+    @PostMapping("/holidays")
+    @PreAuthorize("hasRole('HR_ADMIN')")
+    public ResponseEntity<ApiResponse<PublicHoliday>> addHoliday(@RequestBody PublicHoliday holiday) {
+        if (publicHolidayRepository.findByCountryAndHolidayDate(holiday.getCountry(), holiday.getHolidayDate()).isPresent()) {
+            throw new IllegalArgumentException("Public holiday already exists for this date and country");
+        }
+        PublicHoliday saved = publicHolidayRepository.save(holiday);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(saved, "Public holiday added successfully"));
+    }
+
+    @PostMapping("/upload")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
+    public ResponseEntity<ApiResponse<Map<String, String>>> uploadAttachment(@RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("File cannot be empty");
+        }
+        
+        String originalFileName = org.springframework.util.StringUtils.cleanPath(file.getOriginalFilename());
+        if (originalFileName.contains("..")) {
+            throw new RuntimeException("Filename contains invalid path sequence " + originalFileName);
+        }
+        
+        try {
+            Path storageLoc = Paths.get("uploads", "attachments").toAbsolutePath().normalize();
+            Files.createDirectories(storageLoc);
+            
+            String cleanFileName = System.currentTimeMillis() + "_" + originalFileName;
+            Path targetLocation = storageLoc.resolve(cleanFileName);
+            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
+            
+            return ResponseEntity.ok(ApiResponse.success(Map.of(
+                "fileName", originalFileName,
+                "filePath", targetLocation.toString()
+            ), "File uploaded successfully"));
+        } catch (IOException ex) {
+            throw new RuntimeException("Could not store file " + originalFileName, ex);
+        }
+    }
+
+    @GetMapping("/download")
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN')")
+    public ResponseEntity<org.springframework.core.io.Resource> downloadAttachment(@RequestParam("path") String path) {
+        try {
+            Path filePath = Paths.get(path).normalize();
+            if (!filePath.startsWith(Paths.get("uploads").toAbsolutePath().normalize())) {
+                throw new SecurityException("Unauthorized file path access");
+            }
+            
+            org.springframework.core.io.Resource resource = new org.springframework.core.io.UrlResource(filePath.toUri());
+            if (resource.exists()) {
+                String cleanName = resource.getFilename();
+                if (cleanName != null && cleanName.contains("_")) {
+                    cleanName = cleanName.substring(cleanName.indexOf("_") + 1);
+                }
+                return ResponseEntity.ok()
+                        .contentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM)
+                        .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + cleanName + "\"")
+                        .body(resource);
+            } else {
+                throw new com.dotsolution.dot.common.EntityNotFoundException("File not found");
+            }
+        } catch (java.net.MalformedURLException ex) {
+            throw new com.dotsolution.dot.common.EntityNotFoundException("File not found: " + ex.getMessage());
+        }
     }
 }

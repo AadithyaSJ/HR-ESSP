@@ -23,6 +23,20 @@ const rawCsvContent = ref('');
 const showPayslipModal = ref(false);
 const activePayslip = ref(null);
 
+// Batch Details Modal State
+const showBatchDetailsModal = ref(false);
+const selectedBatch = ref(null);
+
+function openBatchDetails(batch) {
+  selectedBatch.value = batch;
+  showBatchDetailsModal.value = true;
+}
+
+const selectedBatchPayslips = computed(() => {
+  if (!selectedBatch.value) return [];
+  return hrStore.payslips.filter(ps => ps.month === selectedBatch.value.month && ps.status === 'DRAFT');
+});
+
 onMounted(() => {
   activeTab.value = route.meta.tab || 'my-payslips';
 });
@@ -39,10 +53,10 @@ const myPayslips = computed(() => {
 
 // Download sample CSV
 function downloadSampleCSV() {
-  const headers = 'employee_id,basic,allowances,deductions\r\n';
-  const row1 = 'EMP2026101,70000,16666,12500\r\n';
-  const row2 = 'EMP2023102,140000,33333,25000\r\n';
-  const row3 = 'EMP2025104,80000,15000,10000\r\n';
+  const headers = 'employee_code,month,year,gross,deductions,pdf_url\r\n';
+  const row1 = 'EMP004,June,2026,70000,12500,http://localhost:9000/payslips/emp004-june-2026.pdf\r\n';
+  const row2 = 'EMP002,June,2026,120000,25000,http://localhost:9000/payslips/emp002-june-2026.pdf\r\n';
+  const row3 = 'EMP001,June,2026,85000,15000,http://localhost:9000/payslips/emp001-june-2026.pdf\r\n';
   const csvContent = 'data:text/csv;charset=utf-8,' + headers + row1 + row2 + row3;
   
   const encoded = encodeURI(csvContent);
@@ -107,6 +121,29 @@ function handleConfirmUpload() {
   changeTab('publish');
 }
 
+const generatingPayroll = ref(false);
+
+async function handleAutoGeneratePayroll() {
+  if (!selectedMonth.value) {
+    window.showPortalToast('Please select a salary month first', 'error');
+    return;
+  }
+  generatingPayroll.value = true;
+  try {
+    const res = await hrStore.generatePayrollRun(selectedMonth.value, authStore.user.email);
+    if (res.success) {
+      window.showPortalToast(`Payroll drafts successfully generated for all active employees for ${selectedMonth.value}.`, 'success');
+      changeTab('publish');
+    } else {
+      window.showPortalToast(res.errors ? res.errors[0] : 'Failed to generate payroll drafts', 'error');
+    }
+  } catch (err) {
+    window.showPortalToast('Failed to run payroll generator', 'error');
+  } finally {
+    generatingPayroll.value = false;
+  }
+}
+
 // Draft batches listing
 const draftBatches = computed(() => {
   return hrStore.payrollBatches.filter(b => b.status === 'DRAFT');
@@ -164,7 +201,7 @@ function getEmployeeName(code) {
           :class="{ active: activeTab === 'upload' }"
           @click="changeTab('upload')"
         >
-          Upload Payroll CSV
+          Process Monthly Payroll
         </button>
         <button
           v-if="authStore.activeRole === 'HR_ADMIN'"
@@ -228,33 +265,68 @@ function getEmployeeName(code) {
       </div>
     </template>
 
-    <!-- TAB 2: UPLOAD PAYROLL CSV -->
+    <!-- TAB 2: PROCESS MONTHLY PAYROLL -->
     <template v-if="activeTab === 'upload' && authStore.activeRole === 'HR_ADMIN'">
       <div class="grid-12">
-        <!-- left config/form -->
-        <div class="col-4">
-          <div class="glass-card">
-            <h3 class="mb-4">Process New Payroll</h3>
-            <div class="form-group">
-              <label class="form-label">Salary Month</label>
-              <input type="month" v-model="selectedMonth" class="form-control" />
+        <!-- left: Option A Auto-Generate -->
+        <div class="col-6">
+          <div class="glass-card flex flex-col justify-between" style="height: 100%;">
+            <div>
+              <h3 class="mb-4 text-primary">Option A: One-Click Auto-Generation</h3>
+              <p class="text-xs text-secondary mb-6">
+                Automatically calculate basic salary, standard professional tax (12% of gross), TDS, and net paycheck amounts for all active employees in the database based on their registered CTC salary values.
+              </p>
+              
+              <div class="form-group">
+                <label class="form-label">Salary Month</label>
+                <input type="month" v-model="selectedMonth" class="form-control" />
+              </div>
             </div>
 
-            <!-- Upload drag/drop -->
-            <div class="form-group">
-              <label class="form-label">Payroll Data File (CSV)</label>
-              <div
-                class="upload-zone py-8"
-                :class="{ active: isDragging }"
-                @dragover.prevent="isDragging = true"
-                @dragleave="isDragging = false"
-                @drop.prevent="handleCsvDrop"
-                @click="$refs.csvInput.click()"
+            <div class="mt-6">
+              <button
+                type="button"
+                class="btn btn-primary btn-full"
+                :disabled="generatingPayroll"
+                @click="handleAutoGeneratePayroll"
               >
-                <input type="file" ref="csvInput" style="display:none" @change="handleCsvSelect" />
-                <IconHelper name="upload" size="32" color="var(--primary-color)" class="mb-2" />
-                <p class="text-xs font-semibold" v-if="!csvFile">Drag payroll CSV here or click to browse</p>
-                <p class="text-xs text-success font-semibold" v-else>📎 Loaded: {{ csvFile.name }}</p>
+                <IconHelper name="check-circle" size="14" class="mr-1" />
+                {{ generatingPayroll ? 'Generating Payroll...' : 'Calculate & Generate Payroll Drafts' }}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- right: Option B Upload CSV -->
+        <div class="col-6">
+          <div class="glass-card flex flex-col justify-between" style="height: 100%;">
+            <div>
+              <h3 class="mb-4 text-primary">Option B: Import External CSV Template</h3>
+              <p class="text-xs text-secondary mb-6">
+                Upload custom paycheck figures processed externally or from an accounting spreadsheet.
+              </p>
+
+              <div class="form-group">
+                <label class="form-label">Salary Month</label>
+                <input type="month" v-model="selectedMonth" class="form-control" />
+              </div>
+
+              <!-- Upload drag/drop -->
+              <div class="form-group">
+                <label class="form-label">Payroll Data File (CSV)</label>
+                <div
+                  class="upload-zone py-6"
+                  :class="{ active: isDragging }"
+                  @dragover.prevent="isDragging = true"
+                  @dragleave="isDragging = false"
+                  @drop.prevent="handleCsvDrop"
+                  @click="$refs.csvInput.click()"
+                >
+                  <input type="file" ref="csvInput" style="display:none" @change="handleCsvSelect" />
+                  <IconHelper name="upload" size="28" color="var(--primary-color)" class="mb-2" />
+                  <p class="text-xs font-semibold" v-if="!csvFile">Drag CSV here or click to browse</p>
+                  <p class="text-xs text-success font-semibold" v-else>📎 Loaded: {{ csvFile.name }}</p>
+                </div>
               </div>
             </div>
 
@@ -276,18 +348,13 @@ function getEmployeeName(code) {
           </div>
         </div>
 
-        <!-- right validation results -->
-        <div class="col-8">
+        <!-- Validation Results Section -->
+        <div class="col-12 mt-6" v-if="validationResults">
           <div class="glass-card">
-            <h3 class="mb-6">CSV Integrity Validation Report</h3>
-            
-            <div v-if="!validationResults" class="text-center p-8 text-secondary">
-              Upload a CSV file to check validation checks.
-            </div>
-
-            <div v-else>
+            <h3 class="mb-4">CSV Validation Integrity Report</h3>
+            <div>
               <!-- Success Banner -->
-              <div v-if="validationResults.success" class="alert alert-success mb-6" style="min-width:100%">
+              <div v-if="validationResults.success" class="alert alert-success" style="min-width:100%">
                 <div class="flex items-center gap-2">
                   <IconHelper name="check-circle" size="18" />
                   <span>File validated. Ready to process drafts for {{ selectedMonth }}.</span>
@@ -295,7 +362,7 @@ function getEmployeeName(code) {
               </div>
 
               <!-- Error list -->
-              <div v-else class="alert alert-error mb-6" style="min-width:100%; flex-direction:column; align-items:flex-start;">
+              <div v-else class="alert alert-error" style="min-width:100%; flex-direction:column; align-items:flex-start;">
                 <div class="flex items-center gap-2 font-bold mb-2">
                   <IconHelper name="info" size="18" />
                   <span>Validation Errors Detected:</span>
@@ -307,6 +374,7 @@ function getEmployeeName(code) {
             </div>
           </div>
         </div>
+
       </div>
     </template>
 
@@ -332,10 +400,16 @@ function getEmployeeName(code) {
                 <td>{{ b.totalEmployees }} Staff Payslips</td>
                 <td><span class="badge badge-warning">Draft</span></td>
                 <td class="text-right">
-                  <button class="btn btn-success btn-sm px-2 py-6" @click="handlePublishBatch(b.id, b.month)">
-                    <IconHelper name="check-circle" size="14" />
-                    Confirm & Publish
-                  </button>
+                  <div class="flex gap-2 justify-end">
+                    <button class="btn btn-secondary btn-sm px-2 py-6" @click="openBatchDetails(b)">
+                      <IconHelper name="eye" size="14" />
+                      View Details
+                    </button>
+                    <button class="btn btn-success btn-sm px-2 py-6" @click="handlePublishBatch(b.id, b.month)">
+                      <IconHelper name="check-circle" size="14" />
+                      Confirm & Publish
+                    </button>
+                  </div>
                 </td>
               </tr>
               <tr v-if="draftBatches.length === 0">
@@ -490,6 +564,68 @@ function getEmployeeName(code) {
           <button class="btn btn-primary" @click="handleDownloadPayslip(activePayslip)">
             <IconHelper name="download" size="14" />
             Download PDF File
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- BATCH DETAILS MODAL -->
+    <div class="modal-overlay" v-if="showBatchDetailsModal && selectedBatch">
+      <div class="modal-content" style="max-width: 800px; width: 90%;">
+        <div class="modal-header">
+          <h3>Payroll Details - {{ selectedBatch.month }}</h3>
+          <button class="btn btn-ghost btn-sm" @click="showBatchDetailsModal = false">
+            <IconHelper name="plus" size="14" style="transform: rotate(45deg);" />
+          </button>
+        </div>
+        
+        <div class="modal-body">
+          <div class="mb-4 text-sm text-secondary">
+            Source: <b class="font-mono text-xs">{{ selectedBatch.csvName }}</b> • Records: <b>{{ selectedBatchPayslips.length }} Employees</b>
+          </div>
+          
+          <div class="table-container" style="max-height: 400px; overflow-y: auto;">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Gross Earnings</th>
+                  <th>Deductions</th>
+                  <th>Net Disbursed</th>
+                  <th class="text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="ps in selectedBatchPayslips" :key="ps.id">
+                  <td>
+                    <div class="flex flex-col">
+                      <span class="font-bold text-xs">{{ getEmployeeName(ps.employeeCode) }}</span>
+                      <span class="text-xs text-secondary font-mono">{{ ps.employeeCode }}</span>
+                    </div>
+                  </td>
+                  <td class="font-mono text-xs">INR {{ ps.grossPay.toLocaleString() }}</td>
+                  <td class="font-mono text-xs text-danger">INR {{ ps.deductions.toLocaleString() }}</td>
+                  <td class="font-mono text-xs text-success font-semibold">INR {{ ps.netSalary.toLocaleString() }}</td>
+                  <td class="text-right">
+                    <button class="btn btn-ghost btn-xs px-2" @click="openPayslip(ps)">
+                      <IconHelper name="eye" size="12" />
+                      Breakdown
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="selectedBatchPayslips.length === 0">
+                  <td colspan="5" class="text-center text-secondary">No draft payslips found for this batch.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button class="btn btn-secondary" @click="showBatchDetailsModal = false">Close</button>
+          <button class="btn btn-success" @click="handlePublishBatch(selectedBatch.id, selectedBatch.month); showBatchDetailsModal = false;">
+            <IconHelper name="check-circle" size="14" />
+            Confirm & Publish Batch
           </button>
         </div>
       </div>

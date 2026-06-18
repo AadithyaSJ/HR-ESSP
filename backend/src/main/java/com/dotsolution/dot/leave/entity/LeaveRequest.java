@@ -43,6 +43,12 @@ public class LeaveRequest {
     @Column(name = "manager_comment", columnDefinition = "TEXT")
     private String managerComment;
 
+    @Column(name = "attachment_name")
+    private String attachmentName;
+
+    @Column(name = "attachment_path")
+    private String attachmentPath;
+
     @Column(name = "created_at")
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

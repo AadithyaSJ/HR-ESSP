@@ -79,50 +79,113 @@ function toggleTask(taskId) {
   window.showPortalToast('Onboarding task checklist updated', 'info');
 }
 
-// Document Upload Mock
+// Real Document Uploads & Downloads
+import { API_BASE_URL } from '../config.js';
+
 const docType = ref('Personal');
 const isDragging = ref(false);
 
-function handleFileDrop(e) {
+async function handleMandatoryFileUpload(e, mandatoryDocType) {
+  const files = e.target.files;
+  if (files.length > 0) {
+    const file = files[0];
+    const success = await hrStore.uploadDocument(employee.value.id, file, mandatoryDocType, authStore.user.email);
+    if (success) {
+      window.showPortalToast(`"${file.name}" uploaded successfully.`, 'success');
+    } else {
+      window.showPortalToast(`Failed to upload "${file.name}".`, 'error');
+    }
+  }
+}
+
+async function handleOtherFileUpload(e) {
+  const files = e.target.files;
+  if (files.length > 0) {
+    const file = files[0];
+    const success = await hrStore.uploadDocument(employee.value.id, file, docType.value, authStore.user.email);
+    if (success) {
+      window.showPortalToast(`"${file.name}" uploaded successfully.`, 'success');
+    } else {
+      window.showPortalToast(`Failed to upload "${file.name}".`, 'error');
+    }
+  }
+}
+
+async function handleFileDrop(e) {
   isDragging.value = false;
   const files = e.dataTransfer.files;
   if (files.length > 0) {
-    processMockUpload(files[0]);
+    const file = files[0];
+    const success = await hrStore.uploadDocument(employee.value.id, file, docType.value, authStore.user.email);
+    if (success) {
+      window.showPortalToast(`"${file.name}" uploaded successfully.`, 'success');
+    } else {
+      window.showPortalToast(`Failed to upload "${file.name}".`, 'error');
+    }
   }
 }
 
-function handleFileSelect(e) {
-  const files = e.target.files;
-  if (files.length > 0) {
-    processMockUpload(files[0]);
+function downloadRealDoc(doc) {
+  const token = localStorage.getItem('jwt_token');
+  const url = `${API_BASE_URL}/api/v1/employees/${employee.value.id}/documents/${doc.id}/download`;
+  
+  window.showPortalToast(`Downloading ${doc.name}...`, 'info');
+  fetch(url, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  })
+  .then(response => {
+    if (!response.ok) throw new Error('Download failed');
+    return response.blob();
+  })
+  .then(blob => {
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.setAttribute('download', doc.name);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(downloadUrl);
+  })
+  .catch(err => {
+    console.error(err);
+    window.showPortalToast('Failed to download document.', 'error');
+  });
+}
+
+async function deleteRealDoc(docId) {
+  if (confirm('Are you sure you want to delete this document?')) {
+    const success = await hrStore.deleteDocument(employee.value.id, docId, authStore.user.email);
+    if (success) {
+      window.showPortalToast('Document deleted successfully.', 'success');
+    } else {
+      window.showPortalToast('Failed to delete document.', 'error');
+    }
   }
 }
 
-function processMockUpload(file) {
-  const newDoc = {
-    name: file.name,
-    size: `${(file.size / 1024).toFixed(0)} KB`,
-    date: new Date().toISOString().split('T')[0],
-    type: docType.value
-  };
-
-  // Add document to employee list via hrStore
-  const data = { newDocument: newDoc };
-  hrStore.updateEmployeeProfile(employee.value.id, data, authStore.user.email);
-  window.showPortalToast(`File "${file.name}" uploaded successfully to AWS S3.`, 'success');
+function getUploadedDoc(mandatoryName) {
+  return employee.value.documents?.find(d => d.type === mandatoryName);
 }
 
-function downloadMockDoc(docName) {
-  window.showPortalToast(`Downloading ${docName} (Decrypted PDF)...`, 'success');
-  // Simple simulation of secure file retrieval via presigned URL
-  const link = document.createElement('a');
-  link.href = '#';
-  link.setAttribute('download', docName);
-  document.body.appendChild(link);
-  setTimeout(() => {
-    document.body.removeChild(link);
-  }, 100);
+const otherDocuments = computed(() => {
+  const mandatoryNames = hrStore.mandatoryDocuments.map(m => m.name);
+  return employee.value.documents?.filter(d => !mandatoryNames.includes(d.type)) || [];
+});
+
+function triggerFileInput(id) {
+  const el = document.getElementById(`file-input-${id}`);
+  if (el) el.click();
 }
+
+onMounted(() => {
+  hrStore.fetchMandatoryDocuments();
+  if (employee.value) {
+    hrStore.fetchEmployeeDocuments(employee.value.id);
+  }
+});
 </script>
 
 <template>
@@ -149,7 +212,7 @@ function downloadMockDoc(docName) {
           :class="{ active: activeTab === 'documents' }"
           @click="changeTab('documents')"
         >
-          HR Documents
+          My Documents
         </button>
       </div>
     </div>
@@ -300,20 +363,69 @@ function downloadMockDoc(docName) {
         </div>
       </template>
 
-      <!-- TAB 3: HR DOCUMENTS -->
+      <!-- TAB 3: MY DOCUMENTS -->
       <template v-if="activeTab === 'documents'">
-        <!-- Left: Upload Widget -->
-        <div class="col-4">
+        <!-- Left: Mandatory Documents Checklist -->
+        <div class="col-8">
           <div class="glass-card">
-            <h3 class="mb-6">Upload Document</h3>
+            <h3 class="mb-4">Mandatory Required Documents</h3>
+            <p class="text-secondary text-sm mb-6">The following documents are required for organizational verification. Items highlighted in red are pending upload.</p>
+            
+            <div class="mandatory-docs-list">
+              <div v-for="mDoc in hrStore.mandatoryDocuments" :key="mDoc.id" class="mandatory-doc-item mb-4 p-4 rounded border" :style="getUploadedDoc(mDoc.name) ? 'border-color: rgba(34, 197, 94, 0.2); background: rgba(34, 197, 94, 0.02);' : 'border-color: rgba(239, 68, 68, 0.2); background: rgba(239, 68, 68, 0.02);'">
+                <div class="flex items-center justify-between gap-4">
+                  <div>
+                    <h4 class="font-bold text-sm m-0">{{ mDoc.name }}</h4>
+                    <div class="mt-2 flex items-center gap-2">
+                      <span v-if="getUploadedDoc(mDoc.name)" class="badge badge-success text-xs flex items-center gap-1">
+                        <IconHelper name="check" size="12" />
+                        Uploaded: {{ getUploadedDoc(mDoc.name).name }}
+                      </span>
+                      <span v-else class="badge badge-danger text-xs font-semibold" style="background-color: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 2px 6px; border-radius: 4px;">
+                        ⚠️ Pending Upload
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <div class="flex items-center gap-3">
+                    <template v-if="getUploadedDoc(mDoc.name)">
+                      <button class="btn btn-secondary btn-sm flex items-center gap-1" @click="downloadRealDoc(getUploadedDoc(mDoc.name))" title="Download Document">
+                        <IconHelper name="download" size="14" /> Download
+                      </button>
+                      <button class="btn btn-ghost btn-sm text-danger-btn" @click="deleteRealDoc(getUploadedDoc(mDoc.name).id)" title="Delete Document">
+                        <IconHelper name="trash" size="14" />
+                      </button>
+                    </template>
+                    <template v-else>
+                      <div class="inline-upload-form flex items-center gap-2">
+                        <input
+                          type="file"
+                          :id="`file-input-${mDoc.id}`"
+                          style="display: none"
+                          @change="e => handleMandatoryFileUpload(e, mDoc.name)"
+                        />
+                        <button class="btn btn-primary btn-sm flex items-center gap-1" @click="triggerFileInput(mDoc.id)">
+                          <IconHelper name="upload" size="14" /> Upload Document
+                        </button>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </div>
+              <div v-if="hrStore.mandatoryDocuments.length === 0" class="text-center p-8 text-secondary">
+                No mandatory documents required by HR.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Other Custom Documents Upload & List -->
+        <div class="col-4">
+          <div class="glass-card mb-6">
+            <h3 class="mb-4">Upload Other Document</h3>
             <div class="form-group">
-              <label class="form-label">Document Category</label>
-              <select v-model="docType" class="form-control">
-                <option value="Personal">Personal Details</option>
-                <option value="Identity">Identity Proof (Aadhaar/PAN/Passport)</option>
-                <option value="Education">Educational Certificates</option>
-                <option value="Tax">Declaration & Forms</option>
-              </select>
+              <label class="form-label">Document Category / Title</label>
+              <input type="text" v-model="docType" class="form-control" placeholder="e.g. Previous Payslip, Resume" />
             </div>
             
             <div
@@ -322,13 +434,13 @@ function downloadMockDoc(docName) {
               @dragover.prevent="isDragging = true"
               @dragleave="isDragging = false"
               @drop.prevent="handleFileDrop"
-              @click="$refs.fileInput.click()"
+              @click="$refs.otherFileInput.click()"
             >
               <input
                 type="file"
-                ref="fileInput"
+                ref="otherFileInput"
                 style="display: none"
-                @change="handleFileSelect"
+                @change="handleOtherFileUpload"
               />
               <div class="mb-3">
                 <IconHelper name="upload" size="32" color="var(--primary-color)" />
@@ -337,46 +449,40 @@ function downloadMockDoc(docName) {
               <p class="text-xs text-secondary mt-1">or click to browse files (PDF, JPG, PNG)</p>
             </div>
           </div>
-        </div>
 
-        <!-- Right: Uploaded Documents list -->
-        <div class="col-8">
           <div class="glass-card">
-            <h3 class="mb-6">Linked Documents</h3>
+            <h3 class="mb-4">Other Uploaded Documents</h3>
             <div class="table-container">
               <table class="table">
                 <thead>
                   <tr>
-                    <th>Document Name</th>
-                    <th>Category</th>
-                    <th>Upload Date</th>
-                    <th>Size</th>
+                    <th>Name</th>
+                    <th>Type</th>
                     <th class="text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="doc in employee.documents" :key="doc.name">
-                    <td>
-                      <div class="flex items-center gap-2">
-                        <IconHelper name="file-text" size="16" color="#94a3b8" />
-                        <span class="font-semibold">{{ doc.name }}</span>
+                  <tr v-for="doc in otherDocuments" :key="doc.id">
+                    <td class="text-truncate" style="max-width: 120px;" :title="doc.name">
+                      <div class="flex items-center gap-1">
+                        <IconHelper name="file-text" size="14" color="#94a3b8" />
+                        <span class="text-xs font-semibold">{{ doc.name }}</span>
                       </div>
                     </td>
-                    <td>
-                      <span class="badge badge-muted">{{ doc.type }}</span>
-                    </td>
-                    <td>{{ doc.date }}</td>
-                    <td>{{ doc.size }}</td>
+                    <td><span class="badge badge-muted text-xs">{{ doc.type }}</span></td>
                     <td class="text-right">
-                      <button class="btn btn-ghost btn-sm" @click="downloadMockDoc(doc.name)">
-                        <IconHelper name="download" size="14" />
-                      </button>
+                      <div class="flex justify-end gap-1">
+                        <button class="btn btn-ghost btn-sm p-1" @click="downloadRealDoc(doc)">
+                          <IconHelper name="download" size="13" />
+                        </button>
+                        <button class="btn btn-ghost btn-sm text-danger-btn p-1" @click="deleteRealDoc(doc.id)">
+                          <IconHelper name="trash" size="13" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
-                  <tr v-if="employee.documents.length === 0">
-                    <td colspan="5" class="text-center text-secondary">
-                      No documents linked to this profile.
-                    </td>
+                  <tr v-if="otherDocuments.length === 0">
+                    <td colspan="3" class="text-center text-xs text-secondary p-4">No other documents uploaded.</td>
                   </tr>
                 </tbody>
               </table>

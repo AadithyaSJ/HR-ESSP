@@ -4,6 +4,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/authStore.js';
 import { useHrStore } from '../stores/hrStore.js';
 import IconHelper from '../components/IconHelper.vue';
+import { API_BASE_URL } from '../config';
 
 const route = useRoute();
 const router = useRouter();
@@ -41,8 +42,51 @@ const holidayCountry = ref('India');
 const newHolidayName = ref('');
 const newHolidayDate = ref('');
 
+const selectedFile = ref(null);
+const fileInput = ref(null);
+
+function handleFileChange(event) {
+  const file = event.target.files[0];
+  if (file) {
+    selectedFile.value = file;
+  } else {
+    selectedFile.value = null;
+  }
+}
+
+async function triggerDownload(filePath, fileName) {
+  try {
+    const token = localStorage.getItem('jwt_token');
+    const resolvedBase = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
+    const url = `${resolvedBase}/api/v1/leaves/download?path=${encodeURIComponent(filePath)}`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error('Download failed');
+    }
+    
+    const blob = await response.blob();
+    const downloadUrl = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.setAttribute('download', fileName || 'attachment');
+    document.body.appendChild(link);
+    link.click();
+    link.parentNode.removeChild(link);
+    window.URL.revokeObjectURL(downloadUrl);
+  } catch (err) {
+    window.showPortalToast('Failed to download attachment: ' + err.message, 'error');
+  }
+}
+
 onMounted(() => {
   activeTab.value = route.meta.tab || 'my-leaves';
+  hrStore.fetchPublicHolidays();
 });
 
 function changeTab(tab) {
@@ -58,21 +102,17 @@ const myBalances = computed(() => {
 // Calculate requested days
 const calculatedDays = computed(() => {
   if (!applyFromDate.value || !applyToDate.value) return 0;
-  const start = new Date(applyFromDate.value);
-  const end = new Date(applyToDate.value);
-  const diffTime = Math.abs(end - start);
-  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-  return isNaN(diffDays) ? 0 : diffDays;
+  return hrStore.calculateLeaveDaysFrontend(authStore.user.id, applyFromDate.value, applyToDate.value);
 });
 
 // Submitting leave form
-function handleApplyLeave() {
+async function handleApplyLeave() {
   if (!applyFromDate.value || !applyToDate.value || !applyReason.value) {
     window.showPortalToast('Please complete all form fields', 'error');
     return;
   }
   if (calculatedDays.value <= 0) {
-    window.showPortalToast('End date must be on or after start date', 'error');
+    window.showPortalToast('End date must be on or after start date and exclude weekends/holidays', 'error');
     return;
   }
 
@@ -98,6 +138,23 @@ function handleApplyLeave() {
     return;
   }
 
+  let attachmentName = null;
+  let attachmentPath = null;
+
+  if (selectedFile.value) {
+    try {
+      window.showPortalToast('Uploading attachment...', 'info');
+      const uploadRes = await hrStore.uploadLeaveAttachment(selectedFile.value);
+      if (uploadRes) {
+        attachmentName = uploadRes.fileName;
+        attachmentPath = uploadRes.filePath;
+      }
+    } catch (e) {
+      window.showPortalToast('File upload failed. Leave application aborted.', 'error');
+      return;
+    }
+  }
+
   const payload = {
     employeeCode: authStore.user.employeeCode,
     fullName: authStore.user.fullName,
@@ -106,16 +163,26 @@ function handleApplyLeave() {
     fromDate: applyFromDate.value,
     toDate: applyToDate.value,
     daysRequested: calculatedDays.value,
-    reason: applyReason.value
+    reason: applyReason.value,
+    attachmentName,
+    attachmentPath
   };
 
-  hrStore.applyLeave(payload, authStore.user.email);
-  window.showPortalToast('Leave request submitted successfully', 'success');
+  try {
+    await hrStore.applyLeave(payload, authStore.user.email);
+    window.showPortalToast('Leave request submitted successfully', 'success');
 
-  // Reset form
-  applyFromDate.value = '';
-  applyToDate.value = '';
-  applyReason.value = '';
+    // Reset form
+    applyFromDate.value = '';
+    applyToDate.value = '';
+    applyReason.value = '';
+    selectedFile.value = null;
+    if (fileInput.value) {
+      fileInput.value.value = '';
+    }
+  } catch (err) {
+    window.showPortalToast(err.message || 'Failed to submit leave request', 'error');
+  }
 }
 
 // User requests list
@@ -258,23 +325,25 @@ function prevMonth() {
 }
 
 // Add Custom Holiday
-function handleAddHoliday() {
+async function handleAddHoliday() {
   if (!newHolidayName.value || !newHolidayDate.value) {
     window.showPortalToast('Please input holiday name and date', 'error');
     return;
   }
 
-  hrStore.publicHolidays.push({
-    id: `h-${Date.now()}`,
-    country: holidayCountry.value,
-    name: newHolidayName.value,
-    date: newHolidayDate.value,
-    mandatory: true
-  });
+  try {
+    await hrStore.addPublicHoliday({
+      country: holidayCountry.value,
+      name: newHolidayName.value,
+      date: newHolidayDate.value
+    }, authStore.user.email);
 
-  window.showPortalToast(`Holiday "${newHolidayName.value}" added to calendar`, 'success');
-  newHolidayName.value = '';
-  newHolidayDate.value = '';
+    window.showPortalToast(`Holiday "${newHolidayName.value}" added to calendar`, 'success');
+    newHolidayName.value = '';
+    newHolidayDate.value = '';
+  } catch (e) {
+    window.showPortalToast('Failed to add public holiday: ' + (e.message || e), 'error');
+  }
 }
 </script>
 
@@ -342,6 +411,7 @@ function handleAddHoliday() {
                 <label class="form-label">Leave Type</label>
                 <select v-model="applyType" class="form-control">
                   <option v-for="bal in myBalances" :key="bal.type" :value="bal.type">{{ bal.type }} Leave</option>
+                  <option value="Unpaid">Unpaid Leave</option>
                 </select>
               </div>
 
@@ -365,6 +435,14 @@ function handleAddHoliday() {
               <div class="form-group">
                 <label class="form-label">Reason / Notes</label>
                 <textarea v-model="applyReason" class="form-control" placeholder="Specify reason..." required></textarea>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label">Attachment (Optional, e.g. Medical Certificate)</label>
+                <input type="file" ref="fileInput" @change="handleFileChange" class="form-control" />
+                <div v-if="selectedFile" class="text-xs text-secondary mt-1">
+                  Selected: {{ selectedFile.name }} ({{ (selectedFile.size / 1024).toFixed(1) }} KB)
+                </div>
               </div>
 
               <button type="submit" class="btn btn-primary btn-full">
@@ -411,7 +489,20 @@ function handleAddHoliday() {
                       <div class="text-sm">{{ req.fromDate }} to {{ req.toDate }}</div>
                     </td>
                     <td class="font-mono text-sm">{{ req.daysRequested }}</td>
-                    <td class="text-secondary text-truncate max-width-200" :title="req.reason">{{ req.reason }}</td>
+                    <td class="text-secondary max-width-200" :title="req.reason">
+                      <div class="text-truncate">{{ req.reason }}</div>
+                      <div v-if="req.attachmentName" class="mt-1">
+                        <button
+                          type="button"
+                          class="btn btn-ghost btn-xs text-primary flex items-center gap-1 p-0"
+                          style="border: none; background: transparent; cursor: pointer; color: var(--primary-color);"
+                          @click="triggerDownload(req.attachmentPath, req.attachmentName)"
+                        >
+                          <IconHelper name="download" size="12" />
+                          <span class="text-xs font-semibold text-truncate max-width-200" style="display: inline-block;">{{ req.attachmentName }}</span>
+                        </button>
+                      </div>
+                    </td>
                     <td>
                       <span
                         class="badge"
@@ -536,7 +627,20 @@ function handleAddHoliday() {
                 <td>{{ req.leaveType }}</td>
                 <td>{{ req.fromDate }} to {{ req.toDate }}</td>
                 <td class="font-mono">{{ req.daysRequested }}</td>
-                <td class="text-secondary max-width-200 text-truncate" :title="req.reason">{{ req.reason }}</td>
+                <td class="text-secondary max-width-200" :title="req.reason">
+                  <div class="text-truncate">{{ req.reason }}</div>
+                  <div v-if="req.attachmentName" class="mt-1">
+                    <button
+                      type="button"
+                      class="btn btn-ghost btn-xs text-primary flex items-center gap-1 p-0"
+                      style="border: none; background: transparent; cursor: pointer; color: var(--primary-color);"
+                      @click="triggerDownload(req.attachmentPath, req.attachmentName)"
+                    >
+                      <IconHelper name="download" size="12" />
+                      <span class="text-xs font-semibold text-truncate max-width-200" style="display: inline-block;">{{ req.attachmentName }}</span>
+                    </button>
+                  </div>
+                </td>
                 <td>
                   <!-- Simulated team availability warning -->
                   <div class="flex items-center gap-1 text-success text-xs font-semibold">

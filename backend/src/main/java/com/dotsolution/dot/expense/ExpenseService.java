@@ -29,10 +29,15 @@ public class ExpenseService {
 
     private static final Map<String, Double> CATEGORY_LIMITS = new HashMap<>();
     static {
-        CATEGORY_LIMITS.put("TRAVEL", 25000.0);
-        CATEGORY_LIMITS.put("MEALS", 5000.0);
-        CATEGORY_LIMITS.put("EQUIPMENT", 50000.0);
-        CATEGORY_LIMITS.put("OTHER", 10000.0);
+        CATEGORY_LIMITS.put("TRAVEL", 50000.0);
+        CATEGORY_LIMITS.put("ACCOMMODATION", 25000.0);
+        CATEGORY_LIMITS.put("MEALS", 10000.0);
+        CATEGORY_LIMITS.put("BROADBAND", 5000.0);
+        CATEGORY_LIMITS.put("MOBILE", 3000.0);
+        CATEGORY_LIMITS.put("HOMEOFFICE", 30000.0);
+        CATEGORY_LIMITS.put("WELLNESS", 10000.0);
+        CATEGORY_LIMITS.put("CERTIFICATION", 100000.0);
+        CATEGORY_LIMITS.put("OTHER", 20000.0);
     }
 
     public Map<String, Double> getCategoryLimits() {
@@ -41,6 +46,10 @@ public class ExpenseService {
 
     public List<ExpenseClaim> getClaimsByEmployee(UUID employeeId) {
         return expenseClaimRepository.findByEmployeeId(employeeId);
+    }
+
+    public List<ExpenseClaim> getAllClaims() {
+        return expenseClaimRepository.findAll();
     }
 
     public List<ExpenseClaim> getManagerClaims(UUID managerId) {
@@ -64,7 +73,8 @@ public class ExpenseService {
             throw new IllegalArgumentException("Expense amount " + claim.getAmount() + " exceeds the limit of " + limit + " for category: " + claim.getCategory());
         }
 
-        claim.setStatus("PENDING");
+        claim.setStatus("PENDING_FINANCE");
+
         ExpenseClaim savedClaim = expenseClaimRepository.save(claim);
 
         if (receipts != null && !receipts.isEmpty()) {
@@ -122,6 +132,30 @@ public class ExpenseService {
         }
 
         claim.setStatus("REJECTED_BY_FINANCE");
+        return expenseClaimRepository.save(claim);
+    }
+
+    public ExpenseClaim payExpense(UUID id) {
+        ExpenseClaim claim = expenseClaimRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Expense claim not found: " + id));
+
+        if (!"APPROVED".equalsIgnoreCase(claim.getStatus())) {
+            throw new IllegalStateException("Expense claim must be approved by finance before paying");
+        }
+
+        claim.setStatus("PAID");
+        return expenseClaimRepository.save(claim);
+    }
+
+    public ExpenseClaim cancelClaim(UUID id) {
+        ExpenseClaim claim = expenseClaimRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Expense claim not found: " + id));
+
+        if (!"PENDING".equalsIgnoreCase(claim.getStatus()) && !"PENDING_FINANCE".equalsIgnoreCase(claim.getStatus())) {
+            throw new IllegalStateException("Expense claim must be in PENDING or PENDING_FINANCE status to cancel");
+        }
+
+        claim.setStatus("CANCELLED");
         return expenseClaimRepository.save(claim);
     }
 
