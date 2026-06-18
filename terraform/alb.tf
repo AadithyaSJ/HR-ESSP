@@ -46,13 +46,12 @@ resource "aws_lb_target_group" "backend" {
   target_type = "ip"
 
   health_check {
-    path                = "/api/auth/login"
+    path                = "/api/auth/health"
     healthy_threshold   = 3
     unhealthy_threshold = 3
     timeout             = 5
     interval            = 30
-    # Matcher is set to 200-499 since GET /api/auth/login returns 405 Method Not Allowed, which is expected for POST routes.
-    matcher             = "200-499"
+    matcher             = "200"
   }
 
   tags = {
