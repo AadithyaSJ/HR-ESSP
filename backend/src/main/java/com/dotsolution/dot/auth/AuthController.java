@@ -157,4 +157,10 @@ public class AuthController {
 
         return ResponseEntity.ok(ApiResponse.success(response, "Password set successfully, welcome to the portal!"));
     }
+
+    @GetMapping("/health")
+    public ResponseEntity<ApiResponse<String>> healthCheck() {
+        return ResponseEntity.ok(ApiResponse.success("Healthy", "Service is up and running"));
+    }
 }
+
