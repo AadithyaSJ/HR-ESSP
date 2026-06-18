@@ -194,6 +194,13 @@ const sizeStyle = computed(() => `${props.size}px`);
       <circle cx="12" cy="12" r="3" />
     </g>
 
+    <!-- Menu / Hamburger -->
+    <g v-else-if="name === 'menu'">
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </g>
+
     <!-- Default Star -->
     <g v-else>
       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
