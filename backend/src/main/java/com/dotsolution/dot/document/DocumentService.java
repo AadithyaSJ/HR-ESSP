@@ -3,23 +3,20 @@ package com.dotsolution.dot.document;
 import com.dotsolution.dot.auth.entity.User;
 import com.dotsolution.dot.auth.repository.UserRepository;
 import com.dotsolution.dot.common.EntityNotFoundException;
+import com.dotsolution.dot.common.storage.StorageService;
 import com.dotsolution.dot.document.entity.EmployeeDocument;
 import com.dotsolution.dot.document.entity.MandatoryDocument;
 import com.dotsolution.dot.document.repository.EmployeeDocumentRepository;
 import com.dotsolution.dot.document.repository.MandatoryDocumentRepository;
 import com.dotsolution.dot.notification.NotificationService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
-import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.nio.file.*;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -27,8 +24,6 @@ import java.util.UUID;
 @Service
 @Transactional
 public class DocumentService {
-
-    private final Path fileStorageLocation;
 
     @Autowired
     private MandatoryDocumentRepository mandatoryDocumentRepository;
@@ -42,14 +37,8 @@ public class DocumentService {
     @Autowired
     private NotificationService notificationService;
 
-    public DocumentService() {
-        this.fileStorageLocation = Paths.get("uploads").toAbsolutePath().normalize();
-        try {
-            Files.createDirectories(this.fileStorageLocation);
-        } catch (Exception ex) {
-            throw new RuntimeException("Could not create the directory where the uploaded files will be stored.", ex);
-        }
-    }
+    @Autowired
+    private StorageService storageService;
 
     public List<MandatoryDocument> getAllMandatoryDocuments() {
         return mandatoryDocumentRepository.findAll();
@@ -89,38 +78,32 @@ public class DocumentService {
         }
 
         try {
-            Path targetDir = this.fileStorageLocation.resolve(employeeId.toString());
-            Files.createDirectories(targetDir);
-
             // Clean old file of same documentType if exists
             Optional<EmployeeDocument> existing = employeeDocumentRepository
                     .findByEmployeeIdAndDocumentType(employeeId, documentType);
             if (existing.isPresent()) {
                 EmployeeDocument oldDoc = existing.get();
                 try {
-                    Files.deleteIfExists(Paths.get(oldDoc.getFilePath()));
+                    storageService.deleteFile(oldDoc.getFilePath());
                 } catch (Exception e) {
-                    // Ignore delete errors for old local files
+                    // Ignore delete errors for old files
                 }
                 employeeDocumentRepository.delete(oldDoc);
             }
 
-            String cleanFileName = System.currentTimeMillis() + "_" + originalFileName;
-            Path targetLocation = targetDir.resolve(cleanFileName);
-            Files.copy(file.getInputStream(), targetLocation, StandardCopyOption.REPLACE_EXISTING);
-
+            String storagePath = storageService.storeFile(employeeId.toString(), originalFileName, file);
             String fileSize = String.format("%.1f KB", (double) file.getSize() / 1024);
 
             EmployeeDocument employeeDocument = EmployeeDocument.builder()
                     .employeeId(employeeId)
                     .documentType(documentType)
                     .fileName(originalFileName)
-                    .filePath(targetLocation.toString())
+                    .filePath(storagePath)
                     .fileSize(fileSize)
                     .build();
 
             return employeeDocumentRepository.save(employeeDocument);
-        } catch (IOException ex) {
+        } catch (Exception ex) {
             throw new RuntimeException("Could not store file " + originalFileName + ". Please try again!", ex);
         }
     }
@@ -129,14 +112,14 @@ public class DocumentService {
         EmployeeDocument doc = employeeDocumentRepository.findById(documentId)
                 .orElseThrow(() -> new EntityNotFoundException("Document not found with id: " + documentId));
         try {
-            Path filePath = Paths.get(doc.getFilePath()).normalize();
-            Resource resource = new UrlResource(filePath.toUri());
-            if (resource.exists()) {
-                return resource;
-            } else {
-                throw new EntityNotFoundException("File not found: " + doc.getFileName());
-            }
-        } catch (MalformedURLException ex) {
+            byte[] data = storageService.loadFile(doc.getFilePath());
+            return new ByteArrayResource(data) {
+                @Override
+                public String getFilename() {
+                    return doc.getFileName();
+                }
+            };
+        } catch (Exception ex) {
             throw new EntityNotFoundException("File not found: " + doc.getFileName());
         }
     }
@@ -150,7 +133,7 @@ public class DocumentService {
         }
 
         try {
-            Files.deleteIfExists(Paths.get(doc.getFilePath()));
+            storageService.deleteFile(doc.getFilePath());
         } catch (Exception e) {
             // Ignore file deletion errors
         }
