@@ -442,6 +442,11 @@ export const useHrStore = defineStore('hr', () => {
     { code: 'GBP', rate: 106.2, symbol: '£' }
   ]);
 
+  const itTickets = ref([]);
+  const travelRequests = ref([]);
+  const resignations = ref([]);
+  const overtimeRecords = ref([]);
+
   // --- SEED PAYSLIPS ---
   const payslips = ref([
     {
@@ -1813,6 +1818,180 @@ export const useHrStore = defineStore('hr', () => {
     await fetchNotifications(userId);
     await fetchMandatoryDocuments();
     await fetchEmployeeDocuments(employeeId);
+    await fetchItTickets(employeeId);
+    await fetchTravelRequests(employeeId);
+    await fetchResignations(employeeId);
+    await fetchOvertimeRecords(employeeId);
+  }
+
+  // IT Support Kiosk Actions
+  async function fetchItTickets(employeeId) {
+    try {
+      const { useAuthStore } = await import('./authStore');
+      const authStore = useAuthStore();
+      const isAdmin = ['HR_ADMIN', 'SYSTEM_ADMIN'].includes(authStore.activeRole);
+      const url = isAdmin ? '/api/v1/it-kiosk/tickets/all' : `/api/v1/it-kiosk/tickets/my?employeeId=${employeeId}`;
+      const list = await apiRequest(url);
+      itTickets.value = list || [];
+    } catch (e) {
+      console.warn('API error fetching IT tickets:', e.message);
+    }
+  }
+
+  async function createItTicket(ticketData, activeUserEmail) {
+    const created = await apiRequest('/api/v1/it-kiosk/tickets', {
+      method: 'POST',
+      body: JSON.stringify(ticketData)
+    });
+    itTickets.value.unshift(created);
+    addLog(activeUserEmail, 'IT Kiosk', 'CREATE_TICKET', `Created IT support ticket: ${created.title}`);
+    return created;
+  }
+
+  async function updateItTicketStatus(ticketId, status, assignedTo, comment, activeUserEmail) {
+    let url = `/api/v1/it-kiosk/tickets/${ticketId}/status?`;
+    if (status) url += `status=${encodeURIComponent(status)}&`;
+    if (assignedTo) url += `assignedTo=${encodeURIComponent(assignedTo)}&`;
+    if (comment) url += `comment=${encodeURIComponent(comment)}&`;
+    
+    const updated = await apiRequest(url, { method: 'PUT' });
+    const idx = itTickets.value.findIndex(t => t.id === ticketId);
+    if (idx !== -1) {
+      itTickets.value[idx] = updated;
+    }
+    addLog(activeUserEmail, 'IT Kiosk', 'UPDATE_TICKET_STATUS', `Updated IT ticket ${ticketId} status to ${status}`);
+    return updated;
+  }
+
+  // Travel Desk Actions
+  async function fetchTravelRequests(employeeId) {
+    try {
+      const { useAuthStore } = await import('./authStore');
+      const authStore = useAuthStore();
+      const isAdmin = ['HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'].includes(authStore.activeRole);
+      let url = `/api/v1/travel/requests/my?employeeId=${employeeId}`;
+      if (isAdmin) {
+        url = '/api/v1/travel/requests/all';
+      } else if (authStore.activeRole === 'MANAGER') {
+        url = `/api/v1/travel/requests/pending?managerId=${employeeId}`;
+      }
+      const list = await apiRequest(url);
+      travelRequests.value = list || [];
+    } catch (e) {
+      console.warn('API error fetching travel requests:', e.message);
+    }
+  }
+
+  async function createTravelRequest(travelData, activeUserEmail) {
+    const created = await apiRequest('/api/v1/travel/requests', {
+      method: 'POST',
+      body: JSON.stringify(travelData)
+    });
+    travelRequests.value.unshift(created);
+    addLog(activeUserEmail, 'Travel Desk', 'CREATE_TRAVEL_REQUEST', `Submitted travel request to ${created.destination}`);
+    return created;
+  }
+
+  async function updateTravelRequestStatus(requestId, status, rejectionReason, activeUserEmail) {
+    let url = `/api/v1/travel/requests/${requestId}/`;
+    if (status === 'APPROVED') {
+      url += 'approve';
+    } else if (status === 'REJECTED') {
+      url += `reject?reason=${encodeURIComponent(rejectionReason || 'Rejected by manager')}`;
+    } else if (status === 'BOOKED') {
+      url += 'book';
+    }
+    const updated = await apiRequest(url, { method: 'POST' });
+    const idx = travelRequests.value.findIndex(r => r.id === requestId);
+    if (idx !== -1) {
+      travelRequests.value[idx] = updated;
+    }
+    addLog(activeUserEmail, 'Travel Desk', 'UPDATE_TRAVEL_STATUS', `Updated travel request ${requestId} status to ${status}`);
+    return updated;
+  }
+
+  // Resignation Actions
+  async function fetchResignations(employeeId) {
+    try {
+      const { useAuthStore } = await import('./authStore');
+      const authStore = useAuthStore();
+      const isAdmin = ['HR_ADMIN', 'SYSTEM_ADMIN'].includes(authStore.activeRole);
+      const url = isAdmin ? '/api/v1/resignations/all' : `/api/v1/resignations/my?employeeId=${employeeId}`;
+      const list = await apiRequest(url);
+      resignations.value = list || [];
+    } catch (e) {
+      console.warn('API error fetching resignations:', e.message);
+    }
+  }
+
+  async function submitResignation(resignationData, activeUserEmail) {
+    const created = await apiRequest('/api/v1/resignations', {
+      method: 'POST',
+      body: JSON.stringify(resignationData)
+    });
+    resignations.value.unshift(created);
+    addLog(activeUserEmail, 'Resignation', 'SUBMIT_RESIGNATION', `Submitted resignation request`);
+    return created;
+  }
+
+  async function updateResignationStatus(resignationId, status, approvedLwd, rejectionReason, activeUserEmail) {
+    let url = `/api/v1/resignations/${resignationId}/`;
+    if (status === 'APPROVED') {
+      url += `approve?approvedLwd=${encodeURIComponent(approvedLwd || '')}`;
+    } else {
+      url += `reject?reason=${encodeURIComponent(rejectionReason || 'Rejected')}`;
+    }
+    const updated = await apiRequest(url, { method: 'POST' });
+    const idx = resignations.value.findIndex(r => r.id === resignationId);
+    if (idx !== -1) {
+      resignations.value[idx] = updated;
+    }
+    if (status === 'APPROVED') {
+      const emp = employees.value.find(e => e.id === updated.employeeId);
+      if (emp) {
+        emp.status = 'NOTICE_PERIOD';
+      }
+    }
+    addLog(activeUserEmail, 'Resignation', 'UPDATE_RESIGNATION_STATUS', `Resignation ${resignationId} status updated to ${status}`);
+    return updated;
+  }
+
+  // Overtime Actions
+  async function fetchOvertimeRecords(employeeId) {
+    try {
+      const { useAuthStore } = await import('./authStore');
+      const authStore = useAuthStore();
+      const isAdmin = ['HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'].includes(authStore.activeRole);
+      const isManager = authStore.activeRole === 'MANAGER';
+      const url = (isAdmin || isManager) ? '/api/v1/overtime/records/pending' : `/api/v1/overtime/records/my?employeeId=${employeeId}`;
+      const list = await apiRequest(url);
+      overtimeRecords.value = list || [];
+    } catch (e) {
+      console.warn('API error fetching overtime records:', e.message);
+    }
+  }
+
+  async function logOvertimeRecord(overtimeData, activeUserEmail) {
+    const created = await apiRequest('/api/v1/overtime/records', {
+      method: 'POST',
+      body: JSON.stringify(overtimeData)
+    });
+    overtimeRecords.value.unshift(created);
+    addLog(activeUserEmail, 'Overtime', 'LOG_OVERTIME', `Logged ${created.hours} hours of overtime`);
+    return created;
+  }
+
+  async function updateOvertimeRecordStatus(recordId, status, managerId, activeUserEmail) {
+    const action = status === 'APPROVED' ? 'approve' : 'reject';
+    const updated = await apiRequest(`/api/v1/overtime/records/${recordId}/${action}?managerId=${managerId}`, {
+      method: 'POST'
+    });
+    const idx = overtimeRecords.value.findIndex(r => r.id === recordId);
+    if (idx !== -1) {
+      overtimeRecords.value[idx] = updated;
+    }
+    addLog(activeUserEmail, 'Overtime', 'UPDATE_OVERTIME_STATUS', `Overtime record ${recordId} status updated to ${status}`);
+    return updated;
   }
 
   async function approveOnboarding(empId) {
@@ -1851,6 +2030,10 @@ export const useHrStore = defineStore('hr', () => {
     auditLogs,
     backendConnected,
     mandatoryDocuments,
+    itTickets,
+    travelRequests,
+    resignations,
+    overtimeRecords,
     // Methods
     addLog,
     addNotification,
@@ -1891,6 +2074,18 @@ export const useHrStore = defineStore('hr', () => {
     uploadLeaveAttachment,
     uploadExpenseReceipt,
     generatePayrollRun,
-    calculateLeaveDaysFrontend
+    calculateLeaveDaysFrontend,
+    fetchItTickets,
+    createItTicket,
+    updateItTicketStatus,
+    fetchTravelRequests,
+    createTravelRequest,
+    updateTravelRequestStatus,
+    fetchResignations,
+    submitResignation,
+    updateResignationStatus,
+    fetchOvertimeRecords,
+    logOvertimeRecord,
+    updateOvertimeRecordStatus
   };
 });

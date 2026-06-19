@@ -107,7 +107,8 @@ const menuGroups = computed(() => {
         { name: 'My Leaves', icon: 'calendar', path: '/leave', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] },
         { name: 'Leave Calendar', icon: 'calendar', path: '/leave/calendar', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] },
         { name: 'Team Leaves', icon: 'check', path: '/manager/leave', roles: ['MANAGER', 'HR_ADMIN'] },
-        { name: 'Leave Policy Config', icon: 'settings', path: '/admin/leave-policy', roles: ['HR_ADMIN'] }
+        { name: 'Leave Policy Config', icon: 'settings', path: '/admin/leave-policy', roles: ['HR_ADMIN'] },
+        { name: 'Resignation Desk', icon: 'log-out', path: '/resignation', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] }
       ]
     },
     {
@@ -115,7 +116,8 @@ const menuGroups = computed(() => {
       icon: 'dollar',
       items: [
         { name: 'My Payslips', icon: 'dollar', path: '/payslip', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] },
-        { name: 'Payroll Processing', icon: 'upload', path: '/hr/payroll/upload', roles: ['HR_ADMIN'] }
+        { name: 'Payroll Processing', icon: 'upload', path: '/hr/payroll/upload', roles: ['HR_ADMIN'] },
+        { name: 'Overtime Logs', icon: 'clock', path: '/overtime', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] }
       ]
     },
     {
@@ -125,7 +127,15 @@ const menuGroups = computed(() => {
         { name: 'My Expenses', icon: 'credit-card', path: '/expense', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] },
         { name: 'Finance Expense Queue', icon: 'credit-card', path: '/finance/expense', roles: ['FINANCE_ADMIN'] },
         { name: 'Expense Limits Config', icon: 'settings', path: '/admin/expense-limits', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] },
-        { name: 'Currency Rates', icon: 'settings', path: '/admin/currency-rates', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] }
+        { name: 'Currency Rates', icon: 'settings', path: '/admin/currency-rates', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] },
+        { name: 'Travel Desk', icon: 'credit-card', path: '/travel-desk', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] }
+      ]
+    },
+    {
+      title: 'Technical Support',
+      icon: 'settings',
+      items: [
+        { name: 'IT Support Kiosk', icon: 'settings', path: '/it-kiosk', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] }
       ]
     },
     {

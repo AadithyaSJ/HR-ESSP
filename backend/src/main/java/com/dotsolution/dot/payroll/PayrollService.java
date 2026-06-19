@@ -48,6 +48,9 @@ public class PayrollService {
     @Autowired
     private LeaveService leaveService;
 
+    @Autowired
+    private com.dotsolution.dot.payroll.repository.OvertimeRecordRepository overtimeRecordRepository;
+
     public List<Payslip> getPayslipsForEmployee(UUID employeeId, boolean includeUnpublished) {
         if (includeUnpublished) {
             return payslipRepository.findByEmployeeId(employeeId);
@@ -148,11 +151,14 @@ public class PayrollService {
             // Calculate approved expense claims
             double approvedExpenses = calculateApprovedExpenses(emp.getId(), month, year);
 
-            // Gross Pay = baseMonthlySalary - leaveDeduction + approvedExpenses
-            double gross = Math.max(0.0, Math.round(baseMonthlySalary - leaveDeduction + approvedExpenses));
+            // Calculate approved overtime pay
+            double overtimePay = calculateApprovedOvertimePay(emp.getId(), month, year, baseMonthlySalary);
 
-            // Deduction = 12% of basic taxable salary
-            double taxableSalary = Math.max(0.0, baseMonthlySalary - leaveDeduction);
+            // Gross Pay = baseMonthlySalary - leaveDeduction + approvedExpenses + overtimePay
+            double gross = Math.max(0.0, Math.round(baseMonthlySalary - leaveDeduction + approvedExpenses + overtimePay));
+
+            // Deduction = 12% of basic taxable salary (includes overtime, excludes expenses)
+            double taxableSalary = Math.max(0.0, baseMonthlySalary - leaveDeduction + overtimePay);
             double deduction = Math.round(taxableSalary * 0.12);
 
             // Net Pay = Gross Pay - Deduction
@@ -274,6 +280,29 @@ public class PayrollService {
             }
         }
         return totalExpenses;
+    }
+
+    private double calculateApprovedOvertimePay(UUID employeeId, String monthName, int year, double baseMonthlySalary) {
+        java.time.Month targetMonth;
+        try {
+            targetMonth = java.time.Month.valueOf(monthName.toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return 0.0;
+        }
+
+        List<com.dotsolution.dot.payroll.entity.OvertimeRecord> records = overtimeRecordRepository.findByEmployeeIdAndStatus(employeeId, "APPROVED");
+        double totalHours = 0.0;
+        for (com.dotsolution.dot.payroll.entity.OvertimeRecord r : records) {
+            if (r.getDate() != null && r.getDate().getYear() == year && r.getDate().getMonth() == targetMonth) {
+                totalHours += r.getHours();
+            }
+        }
+        
+        // Calculate overtime pay rate (1.5x standard hourly rate)
+        // Assume standard 160 working hours a month
+        double standardHourlyRate = baseMonthlySalary / 160.0;
+        double overtimeHourlyRate = standardHourlyRate * 1.5;
+        return Math.round(totalHours * overtimeHourlyRate);
     }
 
     public void rejectPayslips(String month, Integer year) {
