@@ -5,14 +5,14 @@ import { apiRequest } from '../utils/api';
 export const useAuthStore = defineStore('auth', () => {
   const user = ref({
     id: 'emp-lisa',
-    employeeCode: 'EMP2026001',
+    employeeCode: 'EMP005',
     fullName: 'Lisa Anderson',
     email: 'lisa.anderson@company.com',
     role: 'HR_ADMIN',
     department: 'Human Resources',
     designation: 'HR Administrator',
     phone: '+1 (555) 019-2834',
-    photo: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
+    photo: 'https://robohash.org/EMP005.png?set=set4',
     lastLogin: 'Today, 10:45 AM',
     onboardingStatus: 'APPROVED'
   });
@@ -85,6 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
         role: data.role,
         department: profile?.department || '',
         designation: profile?.designation || '',
+        photo: `https://robohash.org/${data.employeeCode}.png?set=set4`,
         onboardingStatus: profile?.onboardingStatus || 'APPROVED'
       };
 
@@ -130,6 +131,7 @@ export const useAuthStore = defineStore('auth', () => {
         role: data.role,
         department: profile?.department || '',
         designation: profile?.designation || '',
+        photo: `https://robohash.org/${data.employeeCode}.png?set=set4`,
         onboardingStatus: profile?.onboardingStatus || 'APPROVED'
       };
 
@@ -176,6 +178,7 @@ export const useAuthStore = defineStore('auth', () => {
         role: data.role,
         department: profile?.department || '',
         designation: profile?.designation || '',
+        photo: `https://robohash.org/${data.employeeCode}.png?set=set4`,
         onboardingStatus: profile?.onboardingStatus || 'APPROVED'
       };
 

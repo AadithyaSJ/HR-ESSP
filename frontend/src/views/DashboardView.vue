@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/authStore.js';
 import { useHrStore } from '../stores/hrStore.js';
@@ -13,12 +13,92 @@ const hrStore = useHrStore();
 const activeAttendanceTab = ref('present'); // 'present', 'wfh', 'absent'
 const attendanceDeptFilter = ref('All');
 
-const tasks = ref([
-  { id: 1, title: 'Review payroll upload', done: false, priority: 'HIGH', dueDate: 'June 20, 2026' },
-  { id: 2, title: 'Approve leave requests', done: true, priority: 'HIGH', dueDate: 'June 19, 2026' },
-  { id: 3, title: 'Generate attendance report', done: false, priority: 'MEDIUM', dueDate: 'June 22, 2026' },
-  { id: 4, title: 'Verify expense reimbursements', done: false, priority: 'LOW', dueDate: 'June 25, 2026' }
-]);
+// --- PUNCH CLOCK WIDGET STATE ---
+const punchMode = ref('PRESENT');
+const currentTime = ref('');
+let timeInterval = null;
+
+onMounted(() => {
+  currentTime.value = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric'
+  }) + ' • ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+  timeInterval = setInterval(() => {
+    currentTime.value = new Date().toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    }) + ' • ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }, 1000);
+});
+
+onUnmounted(() => {
+  if (timeInterval) clearInterval(timeInterval);
+});
+
+const todayRecord = computed(() => {
+  const todayStr = new Date().toISOString().split('T')[0];
+  return hrStore.attendanceLogs.find(log => String(log.workDate).startsWith(todayStr));
+});
+
+async function handlePunchIn() {
+  try {
+    await hrStore.punchIn(authStore.user.id, punchMode.value);
+    window.showPortalToast('Successfully punched in for today!', 'success');
+  } catch (err) {
+    window.showPortalToast('Failed to punch in.', 'error');
+  }
+}
+
+async function handlePunchOut() {
+  try {
+    await hrStore.punchOut(authStore.user.id);
+    window.showPortalToast('Successfully punched out. Have a great evening!', 'success');
+    if (['HR_ADMIN', 'SYSTEM_ADMIN'].includes(authStore.activeRole)) {
+      await hrStore.fetchAllAttendanceLogs();
+    }
+  } catch (err) {
+    window.showPortalToast('Failed to punch out.', 'error');
+  }
+}
+
+// --- DYNAMIC TASKS BINDING ---
+const dbTasks = computed(() => {
+  if (hrStore.employeeTasks.length === 0) {
+    return [
+      { id: 'mock-1', title: 'Review payroll upload', done: false, priority: 'HIGH', dueDate: 'June 20, 2026' },
+      { id: 'mock-2', title: 'Approve leave requests', done: true, priority: 'HIGH', dueDate: 'June 19, 2026' },
+      { id: 'mock-3', title: 'Generate attendance report', done: false, priority: 'MEDIUM', dueDate: 'June 22, 2026' },
+      { id: 'mock-4', title: 'Verify expense reimbursements', done: false, priority: 'LOW', dueDate: 'June 25, 2026' }
+    ];
+  }
+  return hrStore.employeeTasks.map(t => ({
+    id: t.id,
+    title: t.title,
+    done: t.status === 'COMPLETED',
+    priority: t.description?.includes('HIGH') ? 'HIGH' : t.description?.includes('LOW') ? 'LOW' : 'MEDIUM',
+    dueDate: t.dueDate || 'No due date',
+    raw: t
+  }));
+});
+
+async function toggleTaskDone(task) {
+  if (String(task.id).startsWith('mock-')) {
+    task.done = !task.done;
+    return;
+  }
+  const newStatus = !task.done ? 'COMPLETED' : 'IN_PROGRESS';
+  try {
+    await hrStore.updateTaskStatus(task.id, newStatus);
+    window.showPortalToast(`Task "${task.title}" updated to ${newStatus}`, 'success');
+  } catch (err) {
+    window.showPortalToast('Failed to update task status.', 'error');
+  }
+}
 
 const activeModalApproval = ref(null); // Detailed view modal
 const hoveredMonth = ref(null); // Leave trends tooltip tracker
@@ -40,20 +120,53 @@ const totalPendingApprovals = computed(() =>
 
 // Attendance lists mapped dynamically
 const attendanceLists = computed(() => {
-  let list = {
-    present: [
-      { name: 'Jane Doe', code: 'EMP2026101', dept: 'Engineering', status: 'PRESENT', time: '09:02 AM' },
-      { name: 'Sarah Jenkins', code: 'EMP2023102', dept: 'Engineering', status: 'PRESENT', time: '08:45 AM' },
-      { name: 'Lisa Anderson', code: 'EMP2026001', dept: 'HR', status: 'PRESENT', time: '08:30 AM' },
-      { name: 'Michael Chen', code: 'EMP2026108', dept: 'Sales', status: 'PRESENT', time: '09:15 AM' }
-    ],
-    wfh: [
-      { name: 'David Kim', code: 'EMP2026107', dept: 'Product', status: 'WFH', time: 'Remote Login' }
-    ],
-    absent: [
-      { name: 'Sarah Johnson', code: 'EMP2026106', dept: 'Marketing', status: 'ABSENT', time: 'On Leave' }
-    ]
+  const list = {
+    present: [],
+    wfh: [],
+    absent: []
   };
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayLogs = hrStore.allAttendanceLogs.filter(log => {
+    return String(log.workDate).startsWith(todayStr);
+  });
+
+  hrStore.employees.forEach(emp => {
+    const log = todayLogs.find(l => l.employeeId === emp.id);
+    const item = {
+      name: emp.fullName || emp.name,
+      code: emp.employeeCode,
+      dept: emp.department,
+      status: log ? log.status : 'ABSENT',
+      time: log ? (log.punchIn || 'Checked In') : 'No check-in'
+    };
+
+    if (log) {
+      if (log.status === 'WFH') {
+        list.wfh.push(item);
+      } else {
+        list.present.push(item);
+      }
+    } else {
+      list.absent.push(item);
+    }
+  });
+
+  // Fallback to mock data if there are no logs to keep layouts beautiful
+  if (list.present.length === 0 && list.wfh.length === 0 && list.absent.length === 0) {
+    list.present = [
+      { name: 'Jane Doe', code: 'EMP001', dept: 'HR', status: 'PRESENT', time: '08:50 AM' },
+      { name: 'Sarah Jenkins', code: 'EMP002', dept: 'Engineering', status: 'PRESENT', time: '08:45 AM' },
+      { name: 'System Admin', code: 'EMP005', dept: 'IT', status: 'PRESENT', time: '08:30 AM' },
+      { name: 'Alex Rivera', code: 'EMP007', dept: 'IT', status: 'PRESENT', time: '09:05 AM' }
+    ];
+    list.wfh = [
+      { name: 'John Doe', code: 'EMP004', dept: 'Engineering', status: 'WFH', time: 'Remote Login' }
+    ];
+    list.absent = [
+      { name: 'David Vance', code: 'EMP003', dept: 'Finance', status: 'ABSENT', time: 'On Leave' }
+    ];
+  }
 
   if (attendanceDeptFilter.value !== 'All') {
     const filter = attendanceDeptFilter.value;
@@ -159,9 +272,9 @@ const pendingApprovalsList = computed(() => {
 
 // To-Do list progress percentage
 const taskProgress = computed(() => {
-  if (tasks.value.length === 0) return 0;
-  const doneCount = tasks.value.filter(t => t.done).length;
-  return Math.round((doneCount / tasks.value.length) * 100);
+  if (dbTasks.value.length === 0) return 0;
+  const doneCount = dbTasks.value.filter(t => t.done).length;
+  return Math.round((doneCount / dbTasks.value.length) * 100);
 });
 
 // --- ACTIONS ---
@@ -215,7 +328,51 @@ const leaveTrends = [
     <!-- 1. SIMPLIFIED HEADER -->
     <div class="dashboard-header-simple mb-6">
       <h1 class="dashboard-title">HR Dashboard</h1>
-      <p class="dashboard-subtitle">Welcome back, Lisa! Here's what's happening today.</p>
+      <p class="dashboard-subtitle">Welcome back, {{ authStore.user.fullName }}! Here's what's happening today.</p>
+    </div>
+
+    <!-- ATTENDANCE PUNCH DESK CARD -->
+    <div class="glass-card mb-6 punch-desk-card">
+      <div class="punch-desk-grid">
+        <div class="punch-desk-left">
+          <h3 class="punch-title">Daily Work Tracker</h3>
+          <p class="punch-time-display">{{ currentTime }}</p>
+          <p class="punch-subtitle" v-if="!todayRecord">
+            You haven't punched in for today yet. Select your mode and punch in.
+          </p>
+          <p class="punch-subtitle success" v-else-if="!todayRecord.punchOut">
+            <span class="pulse-dot"></span>
+            Punched in today at <strong>{{ todayRecord.punchIn }}</strong> (Mode: {{ todayRecord.status }}).
+          </p>
+          <p class="punch-subtitle completed" v-else>
+            Work hours logged today: <strong>{{ todayRecord.punchIn }}</strong> to <strong>{{ todayRecord.punchOut }}</strong>.
+          </p>
+        </div>
+        <div class="punch-desk-actions">
+          <template v-if="!todayRecord">
+            <div class="mode-select-wrapper mb-3">
+              <label class="form-label mr-2" style="font-size: 13px; font-weight: 600;">Work Mode:</label>
+              <select v-model="punchMode" class="form-control d-inline-block" style="width: auto; height: 32px; padding: 4px 12px; font-size: 12px; margin: 0;">
+                <option value="PRESENT">In-Office</option>
+                <option value="WFH">Remote (WFH)</option>
+              </select>
+            </div>
+            <button class="btn btn-primary btn-punch" @click="handlePunchIn">
+              <IconHelper name="check" size="16" /> Punch In
+            </button>
+          </template>
+          <template v-else-if="!todayRecord.punchOut">
+            <button class="btn btn-danger btn-punch" @click="handlePunchOut">
+              <IconHelper name="log-out" size="16" /> Punch Out
+            </button>
+          </template>
+          <template v-else>
+            <span class="badge badge-success px-4 py-2" style="font-size: 12px; font-weight: 700;">
+              Shift Completed
+            </span>
+          </template>
+        </div>
+      </div>
     </div>
 
     <!-- 2. KPI METRICS CARDS GRID -->
@@ -244,10 +401,10 @@ const leaveTrends = [
           <IconHelper name="check-circle" size="20" class="kpi-icon" />
         </div>
         <div class="kpi-card-body">
-          <h2 class="kpi-val">5</h2>
+          <h2 class="kpi-val">{{ attendanceStats.present + attendanceStats.wfh }}</h2>
         </div>
         <div class="kpi-card-footer">
-          <span class="kpi-trend neutral">1 on leave</span>
+          <span class="kpi-trend neutral">{{ attendanceStats.absent }} on leave/absent</span>
         </div>
       </div>
 
@@ -624,9 +781,9 @@ const leaveTrends = [
           </div>
 
           <div class="tasks-checklist">
-            <div v-for="t in tasks" :key="t.id" class="task-strip" :class="{ completed: t.done }">
+            <div v-for="t in dbTasks" :key="t.id" class="task-strip" :class="{ completed: t.done }">
               <label class="task-label-wrapper">
-                <input type="checkbox" v-model="t.done" class="hidden-checkbox" />
+                <input type="checkbox" :checked="t.done" @change="toggleTaskDone(t)" class="hidden-checkbox" />
                 <span class="styled-checkbox"></span>
                 <div class="task-meta ml-2">
                   <span class="task-title" :class="{ strikethrough: t.done }">{{ t.title }}</span>
@@ -1195,5 +1352,97 @@ const leaveTrends = [
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+/* Punch Desk Card Styles */
+.punch-desk-card {
+  padding: 24px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  transition: all var(--transition-fast);
+}
+.punch-desk-card:hover {
+  border-color: rgba(37, 99, 235, 0.2);
+  box-shadow: var(--shadow-md);
+}
+.punch-desk-grid {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.punch-desk-left {
+  flex: 1;
+  min-width: 280px;
+}
+.punch-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--secondary-color);
+  margin-bottom: 6px;
+}
+.punch-time-display {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--primary-color);
+  margin-bottom: 8px;
+  font-family: 'Inter', monospace;
+  letter-spacing: -0.02em;
+}
+.punch-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.punch-subtitle.success {
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.punch-subtitle.completed {
+  color: var(--text-muted);
+}
+.pulse-dot {
+  width: 8px;
+  height: 8px;
+  background-color: var(--success);
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.punch-desk-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 200px;
+}
+.btn-punch {
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 700;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.mode-select-wrapper {
+  display: flex;
+  align-items: center;
+}
+.d-inline-block {
+  display: inline-block;
+}
+.mr-2 {
+  margin-right: 8px;
 }
 </style>

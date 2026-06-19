@@ -94,7 +94,7 @@ public class DataLoader implements CommandLineRunner {
     }
 
     private void seedRoles() {
-        List<String> roleNames = Arrays.asList("EMPLOYEE", "MANAGER", "HR_ADMIN", "FINANCE_ADMIN", "SYSTEM_ADMIN");
+        List<String> roleNames = Arrays.asList("EMPLOYEE", "MANAGER", "HR_ADMIN", "FINANCE_ADMIN", "SYSTEM_ADMIN", "IT_SUPPORT");
         for (String roleName : roleNames) {
             if (roleRepository.findByRoleName(roleName).isEmpty()) {
                 roleRepository.save(Role.builder().roleName(roleName).build());
