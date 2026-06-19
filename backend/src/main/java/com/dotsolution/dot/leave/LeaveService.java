@@ -94,6 +94,14 @@ public class LeaveService {
             throw new IllegalArgumentException("Start date cannot be after end date");
         }
 
+        Employee employee = employeeRepository.findById(request.getEmployeeId())
+                .orElseThrow(() -> new com.dotsolution.dot.common.EntityNotFoundException("Employee not found with id: " + request.getEmployeeId()));
+        if ("NOTICE_PERIOD".equalsIgnoreCase(employee.getStatus())) {
+            if (!"SICK".equalsIgnoreCase(request.getLeaveType())) {
+                throw new IllegalArgumentException("Employees serving a notice period are restricted from taking leaves except for Sick Leave.");
+            }
+        }
+
         long days = calculateLeaveDays(request.getEmployeeId(), request.getStartDate(), request.getEndDate());
         if (days == 0) {
             throw new IllegalArgumentException("Leave request contains only weekends and/or public holidays");

@@ -198,6 +198,28 @@ const routes = [
     meta: { tab: 'history', roles: ['HR_ADMIN', 'FINANCE_ADMIN'] }
   },
 
+  // --- EXPANDED CHANNELS ---
+  {
+    path: '/it-kiosk',
+    name: 'it-kiosk',
+    component: () => import('../views/ItKioskView.vue')
+  },
+  {
+    path: '/travel-desk',
+    name: 'travel-desk',
+    component: () => import('../views/TravelDeskView.vue')
+  },
+  {
+    path: '/resignation',
+    name: 'resignation',
+    component: () => import('../views/ResignationView.vue')
+  },
+  {
+    path: '/overtime',
+    name: 'overtime',
+    component: () => import('../views/OvertimeView.vue')
+  },
+
   // --- MANAGER SELF SERVICE ---
   {
     path: '/manager/dashboard',
