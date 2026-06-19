@@ -265,6 +265,15 @@ public class DataSeeder implements ApplicationRunner {
         Employee john = employeeRepository.findByEmployeeCode("EMP004").orElseThrow();
         Employee alex = employeeRepository.findByEmployeeCode("EMP007").orElseThrow();
 
+        // Clear existing tables to ensure a clean, rich run on restart
+        taskRepository.deleteAll();
+        itTicketRepository.deleteAll();
+        travelRequestRepository.deleteAll();
+        overtimeRecordRepository.deleteAll();
+        leaveRequestRepository.deleteAll();
+        expenseClaimRepository.deleteAll();
+        attendanceRepository.deleteAll();
+
         // 1. Seed Attendance logs for past 5 days
         LocalDate today = LocalDate.now();
         for (int i = 0; i < 5; i++) {
@@ -279,126 +288,263 @@ public class DataSeeder implements ApplicationRunner {
             }
         }
 
-        // 2. Seed Tasks
-        if (taskRepository.findAll().isEmpty()) {
-            taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
-                    .employeeId(john.getId())
-                    .assignedBy(sarah.getId())
-                    .title("Complete Docker configuration")
-                    .description("Upgrade the Docker local container configurations and write the instructions in docker-compose.")
-                    .status("IN_PROGRESS")
-                    .dueDate(LocalDate.now().plusDays(2))
-                    .build());
-            
-            taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
-                    .employeeId(john.getId())
-                    .assignedBy(sarah.getId())
-                    .title("Review unit testing coverage")
-                    .description("Make sure the backend payroll and leave service unit test cases are complete.")
-                    .status("COMPLETED")
-                    .dueDate(LocalDate.now().minusDays(1))
-                    .build());
+        // 2. Seed Tasks for ALL employees in ALL roles
+        // John Doe (Employee)
+        taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                .employeeId(john.getId())
+                .assignedBy(sarah.getId())
+                .title("Complete Docker configuration")
+                .description("Upgrade the Docker local container configurations and write the instructions in docker-compose. [HIGH]")
+                .status("IN_PROGRESS")
+                .dueDate(LocalDate.now().plusDays(2))
+                .build());
+        taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                .employeeId(john.getId())
+                .assignedBy(sarah.getId())
+                .title("Review unit testing coverage")
+                .description("Make sure the backend payroll and leave service unit test cases are complete.")
+                .status("COMPLETED")
+                .dueDate(LocalDate.now().minusDays(1))
+                .build());
 
-            taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
-                    .employeeId(jane.getId())
-                    .assignedBy(david.getId())
-                    .title("Perform HR exit policy audit")
-                    .description("Coordinate with the exit desk parameters and document notices restrictions.")
-                    .status("PENDING")
-                    .dueDate(LocalDate.now().plusDays(5))
-                    .build());
+        // Jane Doe (HR Admin)
+        taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                .employeeId(jane.getId())
+                .assignedBy(david.getId())
+                .title("Perform HR exit policy audit")
+                .description("Coordinate with the exit desk parameters and document notices restrictions. [HIGH]")
+                .status("PENDING")
+                .dueDate(LocalDate.now().plusDays(5))
+                .build());
+        taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                .employeeId(jane.getId())
+                .assignedBy(david.getId())
+                .title("Draft FY26 Q4 Recruitment Plan")
+                .description("Summarize engineering headcounts required for the upcoming cycle.")
+                .status("COMPLETED")
+                .dueDate(LocalDate.now().minusDays(2))
+                .build());
 
-            taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
-                    .employeeId(alex.getId())
-                    .assignedBy(admin.getId())
-                    .title("Upgrade office firewall")
-                    .description("Upgrade the corporate office gateway packages and verify rule sets.")
-                    .status("IN_PROGRESS")
-                    .dueDate(LocalDate.now().plusDays(1))
-                    .build());
-        }
+        // Sarah Jenkins (Manager)
+        taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                .employeeId(sarah.getId())
+                .assignedBy(david.getId())
+                .title("Conduct Engineering performance reviews")
+                .description("Compile reviews for all reporting software engineers. [HIGH]")
+                .status("IN_PROGRESS")
+                .dueDate(LocalDate.now().plusDays(3))
+                .build());
+        taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                .employeeId(sarah.getId())
+                .assignedBy(david.getId())
+                .title("Review system architecture spec")
+                .description("Verify the migration plans to AWS Fargate ECS.")
+                .status("COMPLETED")
+                .dueDate(LocalDate.now().minusDays(3))
+                .build());
+
+        // David Vance (Finance Admin)
+        taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                .employeeId(david.getId())
+                .assignedBy(admin.getId())
+                .title("Establish FY27 budget allocations")
+                .description("Draft engineering and operations budget parameters for board review. [HIGH]")
+                .status("PENDING")
+                .dueDate(LocalDate.now().plusDays(7))
+                .build());
+        taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                .employeeId(david.getId())
+                .assignedBy(admin.getId())
+                .title("Verify Q2 Tax filing compliances")
+                .description("Cross check payroll deductions logs and tax credits.")
+                .status("COMPLETED")
+                .dueDate(LocalDate.now().minusDays(5))
+                .build());
+
+        // System Admin (System Admin)
+        taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                .employeeId(admin.getId())
+                .assignedBy(admin.getId()) // self-assigned
+                .title("Perform system security scan")
+                .description("Run vulnerability assessments across hosted EC2 target groups. [HIGH]")
+                .status("IN_PROGRESS")
+                .dueDate(LocalDate.now().plusDays(4))
+                .build());
+        taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                .employeeId(admin.getId())
+                .assignedBy(admin.getId())
+                .title("Review ECS cluster health logs")
+                .description("Ensure scaling triggers match target metrics.")
+                .status("COMPLETED")
+                .dueDate(LocalDate.now().minusDays(4))
+                .build());
+
+        // Alex Rivera (IT Support)
+        taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                .employeeId(alex.getId())
+                .assignedBy(admin.getId())
+                .title("Upgrade office firewall rules")
+                .description("Upgrade the corporate office gateway packages and verify rule sets.")
+                .status("IN_PROGRESS")
+                .dueDate(LocalDate.now().plusDays(1))
+                .build());
+        taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                .employeeId(alex.getId())
+                .assignedBy(admin.getId())
+                .title("Configure remote VPN profiles")
+                .description("Configure OpenVPN profiles for incoming remote developers. [LOW]")
+                .status("COMPLETED")
+                .dueDate(LocalDate.now().minusDays(2))
+                .build());
 
         // 3. Seed IT Tickets
-        if (itTicketRepository.findAll().isEmpty()) {
-            itTicketRepository.save(com.dotsolution.dot.itkiosk.entity.ItTicket.builder()
-                    .employeeId(john.getId())
-                    .title("Need secondary monitor")
-                    .category("HARDWARE_ISSUE")
-                    .description("Please arrange a 24-inch secondary monitor for development workspace.")
-                    .status("PENDING")
-                    .build());
-
-            itTicketRepository.save(com.dotsolution.dot.itkiosk.entity.ItTicket.builder()
-                    .employeeId(jane.getId())
-                    .title("VPN connection drops")
-                    .category("TECHNICAL_ISSUE")
-                    .description("Global VPN client drops connection every 30 minutes. Requesting configuration update.")
-                    .status("IN_PROGRESS")
-                    .assignedTo("Alex Rivera")
-                    .build());
-        }
+        itTicketRepository.save(com.dotsolution.dot.itkiosk.entity.ItTicket.builder()
+                .employeeId(john.getId())
+                .title("Need secondary monitor")
+                .category("HARDWARE_ISSUE")
+                .description("Please arrange a 24-inch secondary monitor for development workspace.")
+                .status("PENDING")
+                .build());
+        itTicketRepository.save(com.dotsolution.dot.itkiosk.entity.ItTicket.builder()
+                .employeeId(jane.getId())
+                .title("VPN connection drops")
+                .category("TECHNICAL_ISSUE")
+                .description("Global VPN client drops connection every 30 minutes. Requesting configuration update.")
+                .status("IN_PROGRESS")
+                .assignedTo("Alex Rivera")
+                .build());
+        itTicketRepository.save(com.dotsolution.dot.itkiosk.entity.ItTicket.builder()
+                .employeeId(sarah.getId())
+                .title("Install IntelliJ Ultimate license")
+                .category("SOFTWARE_INSTALLATION")
+                .description("Requesting license key allocation for engineering manager workstation.")
+                .status("RESOLVED")
+                .assignedTo("Alex Rivera")
+                .comments("License key emailed directly.")
+                .build());
 
         // 4. Seed Travel requests
-        if (travelRequestRepository.findAll().isEmpty()) {
-            travelRequestRepository.save(com.dotsolution.dot.travel.entity.TravelRequest.builder()
-                    .employeeId(john.getId())
-                    .purpose("On-site client integration")
-                    .destination("London, UK")
-                    .startDate(LocalDate.now().plusDays(10))
-                    .endDate(LocalDate.now().plusDays(17))
-                    .needsTicket(true)
-                    .needsAccommodation(true)
-                    .accommodationDetails("Hotel near company office")
-                    .estimatedCost(2500.0)
-                    .status("APPROVED")
-                    .managerId(sarah.getId())
-                    .build());
-        }
+        travelRequestRepository.save(com.dotsolution.dot.travel.entity.TravelRequest.builder()
+                .employeeId(john.getId())
+                .purpose("On-site client integration")
+                .destination("London, UK")
+                .startDate(LocalDate.now().plusDays(10))
+                .endDate(LocalDate.now().plusDays(17))
+                .needsTicket(true)
+                .needsAccommodation(true)
+                .accommodationDetails("Hotel near company office")
+                .estimatedCost(2500.0)
+                .status("APPROVED")
+                .managerId(sarah.getId())
+                .build());
+        travelRequestRepository.save(com.dotsolution.dot.travel.entity.TravelRequest.builder()
+                .employeeId(jane.getId())
+                .purpose("HR Global Meetup")
+                .destination("New York, USA")
+                .startDate(LocalDate.now().plusDays(25))
+                .endDate(LocalDate.now().plusDays(30))
+                .needsTicket(true)
+                .needsAccommodation(true)
+                .accommodationDetails("Corporate apartment")
+                .estimatedCost(3800.0)
+                .status("PENDING")
+                .managerId(david.getId())
+                .build());
 
         // 5. Seed Overtime logs
-        if (overtimeRecordRepository.findAll().isEmpty()) {
-            overtimeRecordRepository.save(com.dotsolution.dot.payroll.entity.OvertimeRecord.builder()
-                    .employeeId(john.getId())
-                    .date(LocalDate.now().minusDays(2))
-                    .hours(4.0)
-                    .purpose("System deployment support and ALB verification")
-                    .status("APPROVED")
-                    .approvedBy(sarah.getId())
-                    .build());
-            
-            overtimeRecordRepository.save(com.dotsolution.dot.payroll.entity.OvertimeRecord.builder()
-                    .employeeId(john.getId())
-                    .date(LocalDate.now().minusDays(1))
-                    .hours(2.5)
-                    .purpose("Production database recovery check")
-                    .status("PENDING")
-                    .build());
-        }
+        overtimeRecordRepository.save(com.dotsolution.dot.payroll.entity.OvertimeRecord.builder()
+                .employeeId(john.getId())
+                .date(LocalDate.now().minusDays(2))
+                .hours(4.0)
+                .purpose("System deployment support and ALB verification")
+                .status("APPROVED")
+                .approvedBy(sarah.getId())
+                .build());
+        overtimeRecordRepository.save(com.dotsolution.dot.payroll.entity.OvertimeRecord.builder()
+                .employeeId(john.getId())
+                .date(LocalDate.now().minusDays(1))
+                .hours(2.5)
+                .purpose("Production database recovery check")
+                .status("PENDING")
+                .build());
 
-        // 6. Seed Leave Requests
-        if (leaveRequestRepository.findAll().isEmpty()) {
-            leaveRequestRepository.save(com.dotsolution.dot.leave.entity.LeaveRequest.builder()
-                    .employeeId(john.getId())
-                    .leaveType("SICK")
-                    .startDate(LocalDate.now().minusDays(5))
-                    .endDate(LocalDate.now().minusDays(4))
-                    .reason("Fever and cold")
-                    .status("APPROVED")
-                    .managerComment("Get well soon")
-                    .build());
-        }
+        // 6. Seed Leave Requests for all employees
+        leaveRequestRepository.save(com.dotsolution.dot.leave.entity.LeaveRequest.builder()
+                .employeeId(john.getId())
+                .leaveType("SICK")
+                .startDate(LocalDate.now().minusDays(5))
+                .endDate(LocalDate.now().minusDays(4))
+                .reason("Fever and cold")
+                .status("APPROVED")
+                .managerComment("Get well soon")
+                .build());
+        leaveRequestRepository.save(com.dotsolution.dot.leave.entity.LeaveRequest.builder()
+                .employeeId(jane.getId())
+                .leaveType("CASUAL")
+                .startDate(LocalDate.now().minusDays(2))
+                .endDate(LocalDate.now().minusDays(1))
+                .reason("Personal work at registry")
+                .status("APPROVED")
+                .managerComment("Approved")
+                .build());
+        leaveRequestRepository.save(com.dotsolution.dot.leave.entity.LeaveRequest.builder()
+                .employeeId(sarah.getId())
+                .leaveType("ANNUAL")
+                .startDate(LocalDate.now().plusDays(10))
+                .endDate(LocalDate.now().plusDays(14))
+                .reason("Summer vacation")
+                .status("PENDING")
+                .build());
+        leaveRequestRepository.save(com.dotsolution.dot.leave.entity.LeaveRequest.builder()
+                .employeeId(david.getId())
+                .leaveType("SICK")
+                .startDate(LocalDate.now().minusDays(10))
+                .endDate(LocalDate.now().minusDays(9))
+                .reason("Dental treatment procedure")
+                .status("APPROVED")
+                .build());
 
-        // 7. Seed Expense Claims
-        if (expenseClaimRepository.findAll().isEmpty()) {
-            expenseClaimRepository.save(com.dotsolution.dot.expense.entity.ExpenseClaim.builder()
-                    .employeeId(john.getId())
-                    .category("MEALS")
-                    .amount(1500.0)
-                    .currency("INR")
-                    .description("Client dinner meeting at Gachibowli")
-                    .status("APPROVED_BY_MANAGER")
-                    .build());
-        }
+        // 7. Seed Expense Claims for all employees
+        expenseClaimRepository.save(com.dotsolution.dot.expense.entity.ExpenseClaim.builder()
+                .employeeId(john.getId())
+                .category("MEALS")
+                .amount(1500.0)
+                .currency("INR")
+                .description("Client dinner meeting at Gachibowli")
+                .status("APPROVED_BY_MANAGER")
+                .build());
+        expenseClaimRepository.save(com.dotsolution.dot.expense.entity.ExpenseClaim.builder()
+                .employeeId(jane.getId())
+                .category("EQUIPMENT")
+                .amount(4500.0)
+                .currency("INR")
+                .description("Ergonomic chair accessories")
+                .status("PENDING")
+                .build());
+        expenseClaimRepository.save(com.dotsolution.dot.expense.entity.ExpenseClaim.builder()
+                .employeeId(sarah.getId())
+                .category("TRAVEL")
+                .amount(12000.0)
+                .currency("INR")
+                .description("Train ticketing for offsite visit")
+                .status("APPROVED")
+                .build());
+        expenseClaimRepository.save(com.dotsolution.dot.expense.entity.ExpenseClaim.builder()
+                .employeeId(david.getId())
+                .category("MEALS")
+                .amount(3500.0)
+                .currency("INR")
+                .description("Executive recruitment catering expenses")
+                .status("APPROVED")
+                .build());
+        expenseClaimRepository.save(com.dotsolution.dot.expense.entity.ExpenseClaim.builder()
+                .employeeId(alex.getId())
+                .category("EQUIPMENT")
+                .amount(2400.0)
+                .currency("INR")
+                .description("Crimping tools and testing adapters for network desk")
+                .status("APPROVED_BY_MANAGER")
+                .build());
     }
 
     private void seedAttendance(UUID employeeId, LocalDate date, String inTime, String outTime, String status) {
