@@ -36,7 +36,7 @@ export const useHrStore = defineStore('hr', () => {
       salary: 1200000,
       salaryBand: 'Band 2 (L2)',
       status: 'ACTIVE',
-      photo: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+      photo: 'https://robohash.org/EMP001.png?set=set4',
       onboardingPercent: 100,
       onboardingStatus: 'APPROVED',
       onboardingTasks: [],
@@ -70,7 +70,7 @@ export const useHrStore = defineStore('hr', () => {
       salary: 1100000,
       salaryBand: 'Band 2 (L2)',
       status: 'ACTIVE',
-      photo: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+      photo: 'https://robohash.org/EMP002.png?set=set4',
       onboardingPercent: 100,
       onboardingStatus: 'APPROVED',
       onboardingTasks: [],
@@ -104,7 +104,7 @@ export const useHrStore = defineStore('hr', () => {
       salary: 1400000,
       salaryBand: 'Band 3 (L3-L4)',
       status: 'ON_LEAVE',
-      photo: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150',
+      photo: 'https://robohash.org/EMP003.png?set=set4',
       onboardingPercent: 100,
       onboardingStatus: 'APPROVED',
       onboardingTasks: [],
@@ -138,7 +138,7 @@ export const useHrStore = defineStore('hr', () => {
       salary: 1600000,
       salaryBand: 'Band 3 (L3-L4)',
       status: 'ACTIVE',
-      photo: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150',
+      photo: 'https://robohash.org/EMP004.png?set=set4',
       onboardingPercent: 100,
       onboardingStatus: 'APPROVED',
       onboardingTasks: [],
@@ -172,7 +172,7 @@ export const useHrStore = defineStore('hr', () => {
       salary: 2200000,
       salaryBand: 'Band 4 (L5-L6)',
       status: 'ACTIVE',
-      photo: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150',
+      photo: 'https://robohash.org/EMP005.png?set=set4',
       onboardingPercent: 100,
       onboardingStatus: 'APPROVED',
       onboardingTasks: [],
@@ -206,7 +206,7 @@ export const useHrStore = defineStore('hr', () => {
       salary: 2800000,
       salaryBand: 'Band 4 (L5-L6)',
       status: 'ACTIVE',
-      photo: 'https://images.unsplash.com/photo-1519345182560-3f2917c472ef?w=150',
+      photo: 'https://robohash.org/EMP006.png?set=set4',
       onboardingPercent: 67,
       onboardingStatus: 'IN_PROGRESS',
       onboardingTasks: [
@@ -446,6 +446,9 @@ export const useHrStore = defineStore('hr', () => {
   const travelRequests = ref([]);
   const resignations = ref([]);
   const overtimeRecords = ref([]);
+  const employeeTasks = ref([]);
+  const attendanceLogs = ref([]);
+  const allAttendanceLogs = ref([]);
 
   // --- SEED PAYSLIPS ---
   const payslips = ref([
@@ -1578,11 +1581,11 @@ export const useHrStore = defineStore('hr', () => {
             managerContact: existing?.managerContact || '',
             joiningDate: emp.joiningDate,
             employmentType: existing?.employmentType || 'Full-time',
-            role: emp.employeeCode === 'EMP001' ? 'HR_ADMIN' : emp.employeeCode === 'EMP002' ? 'MANAGER' : emp.employeeCode === 'EMP003' ? 'FINANCE_ADMIN' : emp.employeeCode === 'EMP005' ? 'SYSTEM_ADMIN' : 'EMPLOYEE',
+            role: emp.role || (emp.employeeCode === 'EMP001' ? 'HR_ADMIN' : emp.employeeCode === 'EMP002' ? 'MANAGER' : emp.employeeCode === 'EMP003' ? 'FINANCE_ADMIN' : emp.employeeCode === 'EMP005' ? 'SYSTEM_ADMIN' : emp.employeeCode === 'EMP007' ? 'IT_SUPPORT' : 'EMPLOYEE'),
             salary: emp.salary,
             salaryBand: emp.salaryBand,
             status: emp.status,
-            photo: existing?.photo || '',
+            photo: 'https://robohash.org/' + emp.employeeCode + '.png?set=set4',
             onboardingPercent: emp.onboardingPercent ?? existing?.onboardingPercent ?? 100,
             onboardingStatus: emp.onboardingStatus || existing?.onboardingStatus || 'APPROVED',
             onboardingTasks: existing?.onboardingTasks || [],
@@ -1822,6 +1825,18 @@ export const useHrStore = defineStore('hr', () => {
     await fetchTravelRequests(employeeId);
     await fetchResignations(employeeId);
     await fetchOvertimeRecords(employeeId);
+    await fetchMyTasks(employeeId);
+    await fetchAttendanceLogs(employeeId);
+    
+    try {
+      const { useAuthStore } = await import('./authStore');
+      const authStore = useAuthStore();
+      if (['HR_ADMIN', 'SYSTEM_ADMIN'].includes(authStore.activeRole)) {
+        await fetchAllAttendanceLogs();
+      }
+    } catch (e) {
+      console.warn('Failed role check in syncAll:', e);
+    }
   }
 
   // IT Support Kiosk Actions
@@ -1994,6 +2009,100 @@ export const useHrStore = defineStore('hr', () => {
     return updated;
   }
 
+  // --- Attendance Actions ---
+  async function fetchAttendanceLogs(employeeId) {
+    try {
+      const logs = await apiRequest(`/api/v1/attendance/logs?employeeId=${employeeId}`);
+      attendanceLogs.value = logs || [];
+    } catch (e) {
+      console.warn('API error fetching attendance logs:', e.message);
+    }
+  }
+
+  async function fetchAllAttendanceLogs() {
+    try {
+      const logs = await apiRequest('/api/v1/attendance/all');
+      allAttendanceLogs.value = logs || [];
+    } catch (e) {
+      console.warn('API error fetching all attendance logs:', e.message);
+    }
+  }
+
+  async function punchIn(employeeId, status = 'PRESENT') {
+    try {
+      const record = await apiRequest(`/api/v1/attendance/punch-in?employeeId=${employeeId}&status=${status}`, {
+        method: 'POST'
+      });
+      const idx = attendanceLogs.value.findIndex(l => l.workDate === record.workDate);
+      if (idx !== -1) {
+        attendanceLogs.value[idx] = record;
+      } else {
+        attendanceLogs.value.unshift(record);
+      }
+      return record;
+    } catch (e) {
+      console.error('Punch in failed:', e);
+      throw e;
+    }
+  }
+
+  async function punchOut(employeeId) {
+    try {
+      const record = await apiRequest(`/api/v1/attendance/punch-out?employeeId=${employeeId}`, {
+        method: 'POST'
+      });
+      const idx = attendanceLogs.value.findIndex(l => l.workDate === record.workDate);
+      if (idx !== -1) {
+        attendanceLogs.value[idx] = record;
+      } else {
+        attendanceLogs.value.unshift(record);
+      }
+      return record;
+    } catch (e) {
+      console.error('Punch out failed:', e);
+      throw e;
+    }
+  }
+
+  // --- Task Actions ---
+  async function fetchMyTasks(employeeId) {
+    try {
+      const tasksList = await apiRequest(`/api/v1/tasks/my?employeeId=${employeeId}`);
+      employeeTasks.value = tasksList || [];
+    } catch (e) {
+      console.warn('API error fetching my tasks:', e.message);
+    }
+  }
+
+  async function assignTask(taskData) {
+    try {
+      const created = await apiRequest('/api/v1/tasks', {
+        method: 'POST',
+        body: JSON.stringify(taskData)
+      });
+      return created;
+    } catch (e) {
+      console.error('Failed to assign task:', e);
+      throw e;
+    }
+  }
+
+  async function updateTaskStatus(taskId, status) {
+    try {
+      const updated = await apiRequest(`/api/v1/tasks/${taskId}/status?status=${status}`, {
+        method: 'PUT'
+      });
+      const idx = employeeTasks.value.findIndex(t => t.id === taskId);
+      if (idx !== -1) {
+        employeeTasks.value[idx] = updated;
+      }
+      return updated;
+    } catch (e) {
+      console.error('Failed to update task status:', e);
+      throw e;
+    }
+  }
+
   async function approveOnboarding(empId) {
     try {
       await apiRequest(`/api/v1/employees/${empId}/approve-onboarding`, {
@@ -2034,6 +2143,9 @@ export const useHrStore = defineStore('hr', () => {
     travelRequests,
     resignations,
     overtimeRecords,
+    employeeTasks,
+    attendanceLogs,
+    allAttendanceLogs,
     // Methods
     addLog,
     addNotification,
@@ -2086,6 +2198,13 @@ export const useHrStore = defineStore('hr', () => {
     updateResignationStatus,
     fetchOvertimeRecords,
     logOvertimeRecord,
-    updateOvertimeRecordStatus
+    updateOvertimeRecordStatus,
+    fetchAttendanceLogs,
+    fetchAllAttendanceLogs,
+    punchIn,
+    punchOut,
+    fetchMyTasks,
+    assignTask,
+    updateTaskStatus
   };
 });

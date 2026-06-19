@@ -40,6 +40,14 @@ public class DataSeeder implements ApplicationRunner {
     @Autowired private com.dotsolution.dot.document.repository.MandatoryDocumentRepository mandatoryDocumentRepository;
     @Autowired private com.dotsolution.dot.leave.repository.PublicHolidayRepository publicHolidayRepository;
 
+    @Autowired private com.dotsolution.dot.attendance.repository.AttendanceRepository attendanceRepository;
+    @Autowired private com.dotsolution.dot.task.repository.TaskRepository taskRepository;
+    @Autowired private com.dotsolution.dot.itkiosk.repository.ItTicketRepository itTicketRepository;
+    @Autowired private com.dotsolution.dot.travel.repository.TravelRequestRepository travelRequestRepository;
+    @Autowired private com.dotsolution.dot.payroll.repository.OvertimeRecordRepository overtimeRecordRepository;
+    @Autowired private com.dotsolution.dot.leave.repository.LeaveRequestRepository leaveRequestRepository;
+    @Autowired private com.dotsolution.dot.expense.repository.ExpenseClaimRepository expenseClaimRepository;
+
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
@@ -49,6 +57,7 @@ public class DataSeeder implements ApplicationRunner {
         seedEmployeesAndUsers();
         seedMandatoryDocuments();
         seedPublicHolidays();
+        seedData();
         System.out.println("[DataSeeder] ✅ Database seeding complete.");
     }
 
@@ -101,7 +110,7 @@ public class DataSeeder implements ApplicationRunner {
 
 
     private void seedRoles() {
-        List<String> roleNames = List.of("HR_ADMIN", "MANAGER", "FINANCE_ADMIN", "EMPLOYEE", "SYSTEM_ADMIN");
+        List<String> roleNames = List.of("HR_ADMIN", "MANAGER", "FINANCE_ADMIN", "EMPLOYEE", "SYSTEM_ADMIN", "IT_SUPPORT");
         for (String roleName : roleNames) {
             roleRepository.findByRoleName(roleName).orElseGet(() -> {
                 Role r = Role.builder().roleName(roleName).build();
@@ -144,6 +153,12 @@ public class DataSeeder implements ApplicationRunner {
                 "Engineering", "Software Engineer", sarah.getId(),
                 LocalDate.of(2025, 5, 1), 1000000.0, "Band 2 (L2-L3)", 80);
 
+        // EMP007 - Alex Rivera (IT_SUPPORT) -> manager = admin
+        Employee alex = seedEmployee("EMP007", "Alex Rivera", "alex.r@company.com",
+                "+91 98765 43260", "IT Helpdesk, Ground Floor, HQ",
+                "IT", "IT Support Specialist", admin.getId(),
+                LocalDate.of(2023, 5, 1), 1200000.0, "Band 2 (L2-L3)", 100);
+
         // Seed users
         String hashedPw = passwordEncoder.encode("password123");
         seedUser("jane.doe@company.com", "EMP001", "HR_ADMIN", hashedPw);
@@ -151,6 +166,7 @@ public class DataSeeder implements ApplicationRunner {
         seedUser("david.v@company.com", "EMP003", "FINANCE_ADMIN", hashedPw);
         seedUser("john.doe@company.com", "EMP004", "EMPLOYEE", hashedPw);
         seedUser("admin@company.com", "EMP005", "SYSTEM_ADMIN", hashedPw);
+        seedUser("alex.r@company.com", "EMP007", "IT_SUPPORT", hashedPw);
 
         // Seed leave balances
         seedLeaveBalances(jane.getId());
@@ -158,6 +174,7 @@ public class DataSeeder implements ApplicationRunner {
         seedLeaveBalances(david.getId());
         seedLeaveBalances(john.getId());
         seedLeaveBalances(admin.getId());
+        seedLeaveBalances(alex.getId());
 
         System.out.println("[DataSeeder] Employees, users, and leave balances seeded.");
     }
@@ -236,6 +253,163 @@ public class DataSeeder implements ApplicationRunner {
                         .build();
                 leaveBalanceRepository.save(lb);
             }
+        }
+    }
+
+    private void seedData() {
+        // Find seeded employees
+        Employee david = employeeRepository.findByEmployeeCode("EMP003").orElseThrow();
+        Employee admin = employeeRepository.findByEmployeeCode("EMP005").orElseThrow();
+        Employee jane = employeeRepository.findByEmployeeCode("EMP001").orElseThrow();
+        Employee sarah = employeeRepository.findByEmployeeCode("EMP002").orElseThrow();
+        Employee john = employeeRepository.findByEmployeeCode("EMP004").orElseThrow();
+        Employee alex = employeeRepository.findByEmployeeCode("EMP007").orElseThrow();
+
+        // 1. Seed Attendance logs for past 5 days
+        LocalDate today = LocalDate.now();
+        for (int i = 0; i < 5; i++) {
+            LocalDate date = today.minusDays(i);
+            if (date.getDayOfWeek().getValue() <= 5) { // Weekdays only
+                seedAttendance(david.getId(), date, "09:00 AM", "05:30 PM", "PRESENT");
+                seedAttendance(jane.getId(), date, "08:50 AM", "06:00 PM", "PRESENT");
+                seedAttendance(sarah.getId(), date, "08:45 AM", "05:45 PM", "PRESENT");
+                seedAttendance(john.getId(), date, "09:15 AM", "06:30 PM", "PRESENT");
+                seedAttendance(admin.getId(), date, "08:30 AM", "05:00 PM", "PRESENT");
+                seedAttendance(alex.getId(), date, "09:05 AM", "05:35 PM", "PRESENT");
+            }
+        }
+
+        // 2. Seed Tasks
+        if (taskRepository.findAll().isEmpty()) {
+            taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                    .employeeId(john.getId())
+                    .assignedBy(sarah.getId())
+                    .title("Complete Docker configuration")
+                    .description("Upgrade the Docker local container configurations and write the instructions in docker-compose.")
+                    .status("IN_PROGRESS")
+                    .dueDate(LocalDate.now().plusDays(2))
+                    .build());
+            
+            taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                    .employeeId(john.getId())
+                    .assignedBy(sarah.getId())
+                    .title("Review unit testing coverage")
+                    .description("Make sure the backend payroll and leave service unit test cases are complete.")
+                    .status("COMPLETED")
+                    .dueDate(LocalDate.now().minusDays(1))
+                    .build());
+
+            taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                    .employeeId(jane.getId())
+                    .assignedBy(david.getId())
+                    .title("Perform HR exit policy audit")
+                    .description("Coordinate with the exit desk parameters and document notices restrictions.")
+                    .status("PENDING")
+                    .dueDate(LocalDate.now().plusDays(5))
+                    .build());
+
+            taskRepository.save(com.dotsolution.dot.task.entity.Task.builder()
+                    .employeeId(alex.getId())
+                    .assignedBy(admin.getId())
+                    .title("Upgrade office firewall")
+                    .description("Upgrade the corporate office gateway packages and verify rule sets.")
+                    .status("IN_PROGRESS")
+                    .dueDate(LocalDate.now().plusDays(1))
+                    .build());
+        }
+
+        // 3. Seed IT Tickets
+        if (itTicketRepository.findAll().isEmpty()) {
+            itTicketRepository.save(com.dotsolution.dot.itkiosk.entity.ItTicket.builder()
+                    .employeeId(john.getId())
+                    .title("Need secondary monitor")
+                    .category("HARDWARE_ISSUE")
+                    .description("Please arrange a 24-inch secondary monitor for development workspace.")
+                    .status("PENDING")
+                    .build());
+
+            itTicketRepository.save(com.dotsolution.dot.itkiosk.entity.ItTicket.builder()
+                    .employeeId(jane.getId())
+                    .title("VPN connection drops")
+                    .category("TECHNICAL_ISSUE")
+                    .description("Global VPN client drops connection every 30 minutes. Requesting configuration update.")
+                    .status("IN_PROGRESS")
+                    .assignedTo("Alex Rivera")
+                    .build());
+        }
+
+        // 4. Seed Travel requests
+        if (travelRequestRepository.findAll().isEmpty()) {
+            travelRequestRepository.save(com.dotsolution.dot.travel.entity.TravelRequest.builder()
+                    .employeeId(john.getId())
+                    .purpose("On-site client integration")
+                    .destination("London, UK")
+                    .startDate(LocalDate.now().plusDays(10))
+                    .endDate(LocalDate.now().plusDays(17))
+                    .needsTicket(true)
+                    .needsAccommodation(true)
+                    .accommodationDetails("Hotel near company office")
+                    .estimatedCost(2500.0)
+                    .status("APPROVED")
+                    .managerId(sarah.getId())
+                    .build());
+        }
+
+        // 5. Seed Overtime logs
+        if (overtimeRecordRepository.findAll().isEmpty()) {
+            overtimeRecordRepository.save(com.dotsolution.dot.payroll.entity.OvertimeRecord.builder()
+                    .employeeId(john.getId())
+                    .date(LocalDate.now().minusDays(2))
+                    .hours(4.0)
+                    .purpose("System deployment support and ALB verification")
+                    .status("APPROVED")
+                    .approvedBy(sarah.getId())
+                    .build());
+            
+            overtimeRecordRepository.save(com.dotsolution.dot.payroll.entity.OvertimeRecord.builder()
+                    .employeeId(john.getId())
+                    .date(LocalDate.now().minusDays(1))
+                    .hours(2.5)
+                    .purpose("Production database recovery check")
+                    .status("PENDING")
+                    .build());
+        }
+
+        // 6. Seed Leave Requests
+        if (leaveRequestRepository.findAll().isEmpty()) {
+            leaveRequestRepository.save(com.dotsolution.dot.leave.entity.LeaveRequest.builder()
+                    .employeeId(john.getId())
+                    .leaveType("SICK")
+                    .startDate(LocalDate.now().minusDays(5))
+                    .endDate(LocalDate.now().minusDays(4))
+                    .reason("Fever and cold")
+                    .status("APPROVED")
+                    .managerComment("Get well soon")
+                    .build());
+        }
+
+        // 7. Seed Expense Claims
+        if (expenseClaimRepository.findAll().isEmpty()) {
+            expenseClaimRepository.save(com.dotsolution.dot.expense.entity.ExpenseClaim.builder()
+                    .employeeId(john.getId())
+                    .category("MEALS")
+                    .amount(1500.0)
+                    .currency("INR")
+                    .description("Client dinner meeting at Gachibowli")
+                    .status("APPROVED_BY_MANAGER")
+                    .build());
+        }
+    }
+
+    private void seedAttendance(UUID employeeId, LocalDate date, String inTime, String outTime, String status) {
+        if (attendanceRepository.findByEmployeeIdAndWorkDate(employeeId, date).isEmpty()) {
+            attendanceRepository.save(com.dotsolution.dot.attendance.entity.Attendance.builder()
+                    .employeeId(employeeId)
+                    .workDate(date)
+                    .punchIn(inTime)
+                    .punchOut(outTime)
+                    .status(status)
+                    .build());
         }
     }
 }

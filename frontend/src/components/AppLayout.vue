@@ -62,7 +62,8 @@ const activeRoleName = computed(() => {
     MANAGER: 'Manager / Lead',
     HR_ADMIN: 'HR Manager',
     FINANCE_ADMIN: 'Finance Admin',
-    SYSTEM_ADMIN: 'System Admin'
+    SYSTEM_ADMIN: 'System Admin',
+    IT_SUPPORT: 'IT Support Specialist'
   };
   return map[authStore.activeRole] || authStore.activeRole;
 });
@@ -135,7 +136,7 @@ const menuGroups = computed(() => {
       title: 'Technical Support',
       icon: 'settings',
       items: [
-        { name: 'IT Support Kiosk', icon: 'settings', path: '/it-kiosk', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN'] }
+        { name: 'IT Support Kiosk', icon: 'settings', path: '/it-kiosk', roles: ['EMPLOYEE', 'MANAGER', 'HR_ADMIN', 'FINANCE_ADMIN', 'SYSTEM_ADMIN', 'IT_SUPPORT'] }
       ]
     },
     {
