@@ -27,6 +27,7 @@ const newEmpAddress = ref('');
 const newEmpEmergency = ref('');
 const newEmpDept = ref('');
 const newEmpDesig = ref('');
+const newEmpJoinDate = ref('');
 const newEmpWorkLocation = ref('');
 const newEmpType = ref('Full-time');
 const newEmpRole = ref('EMPLOYEE');
@@ -284,6 +285,7 @@ function resetForm() {
   newEmpEmergency.value = '';
   newEmpDept.value = '';
   newEmpDesig.value = '';
+  newEmpJoinDate.value = '';
   newEmpWorkLocation.value = '';
   newEmpType.value = 'Full-time';
   newEmpRole.value = 'EMPLOYEE';
@@ -715,6 +717,7 @@ function updateOnboardingTask(empId, taskId) {
                   <option value="New York">New York</option>
                   <option value="San Francisco">San Francisco</option>
                   <option value="Hyderabad">Hyderabad</option>
+                  <option value="Chennai">Chennai</option>
                   <option value="Remote">Remote</option>
                 </select>
               </div>
